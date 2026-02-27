@@ -326,9 +326,8 @@ elif menu == "📈 자산 관리(주식)":
 
 elif menu == "🎣 낚시":
     st.markdown("<h1 style='text-align: center;'>도시어부 라이프 🎣</h1>", unsafe_allow_html=True)
-    st.write("") 
-
-    # 1. 데이터 로드
+    
+    # 1. 데이터 로드 (구글 시트 연동)
     csv_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS5oMJ3Lo3azFRkQnIrJAtBGOrX2S8WUIlSCI2Qf4ylmDsAddx9aRDP6hgzqyDCfQ/pub?output=csv"
     if 'df_fishing' not in st.session_state:
         try:
@@ -357,61 +356,65 @@ elif menu == "🎣 낚시":
             st.divider()
 
             if selected_region != "선택하세요":
-                # --- 💡 [핵심] 버튼 영역을 물때 데이터 호출 전으로 이동했습니다! ---
-                st.success(f"✅ **{target_date.strftime('%m/%d')} {selected_region}** 출조 정보")
-                
+                # --- 🚩 공통 정보 설정 ---
+                obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
+                obs_code = "DT_0026"
+                for k, v in obs_map.items():
+                    if k in selected_region: obs_code = v; break
+
+                # 🔐 보안 설정된 API 키 가져오기
+                API_KEY = st.secrets["KHOA_API_KEY"] #
+                import requests
+
+                # --- 💨 1. 실시간 해상 관측 정보 (풍속, 수온 등) ---
+                obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={API_KEY}&ObsCode={obs_code}&ResultType=json"
+                try:
+                    obs_res = requests.get(obs_url, timeout=5).json()
+                    if "result" in obs_res and "data" in obs_res["result"]:
+                        curr = obs_res["result"]["data"][0]
+                        st.markdown(f"#### 🚩 {selected_region} 실시간 해상 현황")
+                        w1, w2, w3 = st.columns(3)
+                        w1.metric("💨 풍속", f"{curr.get('wind_speed', '-')} m/s") #
+                        w2.metric("🌡️ 수온", f"{curr.get('water_temp', '-')} ℃") #
+                        w3.metric("📏 조위", f"{curr.get('tide_level', '-')} cm") #
+                        st.caption(f"🕒 관측시각: {curr.get('record_time', '-')}")
+                except:
+                    st.info("실시간 해상 관측 정보를 불러오는 중입니다...")
+
+                # --- 🚢 2. 예약 버튼 영역 ---
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
-                    # 바다타임 검색은 무조건 가능
                     st.link_button(f"🌊 {selected_region} 상세 물때 (바다타임)", f"https://www.badatime.com/search.jsp?q={selected_region}", use_container_width=True)
-                
                 with btn_col2:
-                    # 선사 예약 버튼 (선사 선택 시에만)
                     if selected_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
                         boat_row = df_fishing[(df_fishing["지역"]==selected_region) & (df_fishing["선사명"]==selected_name)]
                         if not boat_row.empty:
                             res_url = boat_row["예약사이트"].values[0]
                             if res_url and str(res_url).startswith("http"):
                                 st.link_button(f"🚢 {selected_name} 예약하기", str(res_url), use_container_width=True, type="primary")
-                            else:
-                                st.button("🚫 예약 정보 없음 (엑셀 확인)", disabled=True, use_container_width=True)
-                    else:
-                        st.info("선사를 선택하면 예약 버튼이 나타납니다.")
-
-                st.write("") # 간격 조절
-
-                # --- 🌊 물때 데이터 호출 부분 ---
-                obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
-                obs_code = "DT_0026"
-                for k, v in obs_map.items():
-                    if k in selected_region: obs_code = v; break
-
-                API_KEY = st.secrets["KHOA_API_KEY"]
-                t_date_str = target_date.strftime("%Y%m%d")
-                url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObsPre/search.do?ServiceKey={API_KEY}&ObsCode={obs_code}&Date={t_date_str}&ResultType=json"
                 
-                import requests
+                # --- 📊 3. 물때 예보 정보 ---
+                t_date_str = target_date.strftime("%Y%m%d")
+                tide_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObsPre/search.do?ServiceKey={API_KEY}&ObsCode={obs_code}&Date={t_date_str}&ResultType=json"
                 try:
-                    res = requests.get(url, timeout=5).json()
-                    if "result" in res and "data" in res["result"]:
-                        t_df = pd.DataFrame(res["result"]["data"]).rename(columns={'tph_time':'시각', 'tph_level':'조위(cm)', 'hl_code':'구분'})
+                    t_res = requests.get(tide_url, timeout=5).json()
+                    if "result" in t_res and "data" in t_res["result"]:
+                        t_df = pd.DataFrame(t_res["result"]["data"]).rename(columns={'tph_time':'시각', 'tph_level':'조위(cm)', 'hl_code':'구분'})
                         t_df['구분'] = t_df['구분'].replace({'H':'▲ 만조', 'L':'▼ 간조'})
-                        st.write(f"📊 **{selected_region} 주변 물때표 ({obs_code})**")
+                        st.write(f"📊 **{target_date.strftime('%m/%d')} 상세 물때표**")
                         st.table(t_df[['시각', '구분', '조위(cm)']])
-                    else:
-                        st.warning("⚠️ 물때 데이터를 불러올 수 없습니다. (API 활성화 대기 중)")
                 except:
-                    st.error("📡 물때 서버 연결 실패")
+                    st.warning("물때 예보 데이터를 불러올 수 없습니다. (키 활성화 대기 중)")
             else:
                 st.info("💡 위에서 **출조 지역**을 선택해 주세요.")
 
     # --- [탭 2] 선사 정보 ---
     with tab2:
-        st.subheader("🚢 자주 찾는 선사 목록")
+        st.subheader("🚢 자주 찾는 선사 정보")
         if not df_fishing.empty:
             st.dataframe(df_fishing, use_container_width=True, hide_index=True)
 
-    # --- [탭 3] 📸 낚시사진 ---
+    # --- [탭 3] 📸 낚시 사진 ---
     with tab3:
         st.subheader("📸 낚시의 추억")
         st.write("멋진 조과 사진을 기다립니다!")
