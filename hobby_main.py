@@ -386,7 +386,7 @@ elif menu == "🎣 낚시":
                 for k, v in obs_map.items():
                     if k in selected_region: obs_code = v; break
 
-                API_KEY = "4fd6cd5573cde304c41d9f2f80df2bc4a338ecb2929da4e368469bc981c95b5c"
+                API_KEY = st.secrets["KHOA_API_KEY"]
                 t_date_str = target_date.strftime("%Y%m%d")
                 url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObsPre/search.do?ServiceKey={API_KEY}&ObsCode={obs_code}&Date={t_date_str}&ResultType=json"
                 
