@@ -328,86 +328,90 @@ elif menu == "🎣 낚시":
     st.markdown("<h1 style='text-align: center;'>도시어부 라이프 🎣</h1>", unsafe_allow_html=True)
     st.write("") 
 
-    # --- 1. [핵심] 공통 데이터 로드 및 세션 저장 ---
-    # 재형님의 구글 드라이브 엑셀 데이터 URL
+    # 1. 데이터 로드
     csv_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS5oMJ3Lo3azFRkQnIrJAtBGOrX2S8WUIlSCI2Qf4ylmDsAddx9aRDP6hgzqyDCfQ/pub?output=csv"
-    
     if 'df_fishing' not in st.session_state:
         try:
-            # 데이터를 불러와서 세션에 박제합니다. (앱 실행 중 한 번만 수행)
-            temp_df = pd.read_csv(csv_url).fillna("")
-            st.session_state.df_fishing = temp_df
-        except Exception as e:
-            st.error(f"엑셀 데이터를 가져오지 못했습니다: {e}")
+            st.session_state.df_fishing = pd.read_csv(csv_url).fillna("")
+        except:
             st.session_state.df_fishing = pd.DataFrame()
-
-    # 실제 사용할 데이터 변수 할당
     df_fishing = st.session_state.df_fishing
 
-    # 탭 구성 (통합 탭을 1번으로 배치)
     tab1, tab2, tab3 = st.tabs(["📅 출조 포털 & 물때", "🚢 선사정보", "📸 낚시사진"])
     
-    # --- [탭 1] 출조 포털 & 물때 ---
     with tab1:
         st.subheader("📅 원클릭 출조 & 실시간 물때")
         if not df_fishing.empty:
             c1, c2, c3 = st.columns(3)
-            with c1: target_date = st.date_input("출조 희망 일자 🗓️", value=today, format="YYYY/MM/DD")
+            with c1: target_date = st.date_input("출조 희망 일자 🗓️", value=today, format="YYYY/MM/DD", key="d1")
             with c2:
                 t2_regions = ["선택하세요"] + sorted([str(x) for x in df_fishing["지역"].unique() if str(x).strip() != ""])
-                selected_region = st.selectbox("출조 지역 📍", t2_regions, key="portal_reg")
+                selected_region = st.selectbox("출조 지역 📍", t2_regions, key="r1")
             with c3:
                 if selected_region != "선택하세요":
-                    t2_names = ["선택하세요"] + sorted([str(x) for x in df_fishing[df_fishing["지역"] == selected_region]["선사명"].unique()])
+                    r_filtered = df_fishing[df_fishing["지역"] == selected_region]
+                    t2_names = ["선택하세요"] + sorted([str(x) for x in r_filtered["선사명"].unique()])
                 else: t2_names = ["지역을 먼저 선택하세요"]
-                selected_name = st.selectbox("선사명 🚢", t2_names, key="portal_name")
+                selected_name = st.selectbox("선사명 🚢", t2_names, key="n1")
+
+            st.divider()
 
             if selected_region != "선택하세요":
-                st.divider()
-                # (물때 API 호출 및 출력 로직 동일...)
-                # (API 키 활성화 전이면 메시지 출력)
-                st.info(f"💡 {selected_region} 지역의 물때표를 불러오는 중입니다. (API 활성화 대기 중일 수 있음)")
+                # --- 💡 [핵심] 버튼 영역을 물때 데이터 호출 전으로 이동했습니다! ---
+                st.success(f"✅ **{target_date.strftime('%m/%d')} {selected_region}** 출조 정보")
+                
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    # 바다타임 검색은 무조건 가능
+                    st.link_button(f"🌊 {selected_region} 상세 물때 (바다타임)", f"https://www.badatime.com/search.jsp?q={selected_region}", use_container_width=True)
+                
+                with btn_col2:
+                    # 선사 예약 버튼 (선사 선택 시에만)
+                    if selected_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
+                        boat_row = df_fishing[(df_fishing["지역"]==selected_region) & (df_fishing["선사명"]==selected_name)]
+                        if not boat_row.empty:
+                            res_url = boat_row["예약사이트"].values[0]
+                            if res_url and str(res_url).startswith("http"):
+                                st.link_button(f"🚢 {selected_name} 예약하기", str(res_url), use_container_width=True, type="primary")
+                            else:
+                                st.button("🚫 예약 정보 없음 (엑셀 확인)", disabled=True, use_container_width=True)
+                    else:
+                        st.info("선사를 선택하면 예약 버튼이 나타납니다.")
 
-    # --- [탭 2] 선사 정보 (수정된 부분!) ---
+                st.write("") # 간격 조절
+
+                # --- 🌊 물때 데이터 호출 부분 ---
+                obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
+                obs_code = "DT_0026"
+                for k, v in obs_map.items():
+                    if k in selected_region: obs_code = v; break
+
+                API_KEY = "4fd6cd5573cde304c41d9f2f80df2bc4a338ecb2929da4e368469bc981c95b5c"
+                t_date_str = target_date.strftime("%Y%m%d")
+                url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObsPre/search.do?ServiceKey={API_KEY}&ObsCode={obs_code}&Date={t_date_str}&ResultType=json"
+                
+                import requests
+                try:
+                    res = requests.get(url, timeout=5).json()
+                    if "result" in res and "data" in res["result"]:
+                        t_df = pd.DataFrame(res["result"]["data"]).rename(columns={'tph_time':'시각', 'tph_level':'조위(cm)', 'hl_code':'구분'})
+                        t_df['구분'] = t_df['구분'].replace({'H':'▲ 만조', 'L':'▼ 간조'})
+                        st.write(f"📊 **{selected_region} 주변 물때표 ({obs_code})**")
+                        st.table(t_df[['시각', '구분', '조위(cm)']])
+                    else:
+                        st.warning("⚠️ 물때 데이터를 불러올 수 없습니다. (API 활성화 대기 중)")
+                except:
+                    st.error("📡 물때 서버 연결 실패")
+            else:
+                st.info("💡 위에서 **출조 지역**을 선택해 주세요.")
+
+    # --- [탭 2] 선사 정보 ---
     with tab2:
-        st.subheader("🚢 자주 찾는 선사 정보")
-        
+        st.subheader("🚢 자주 찾는 선사 목록")
         if not df_fishing.empty:
-            with st.expander("🔍 선사 검색 및 필터", expanded=True):
-                f1, f2, f3, f4 = st.columns(4)
-                with f1: filter_main = st.selectbox("주요 관심선사", ["전체보기", "O", "X"], key="f_main")
-                with f2: filter_logman = st.selectbox("로구만 프렌즈", ["전체보기", "O", "X"], key="f_log")
-                with f3:
-                    r_list = ["전체보기"] + sorted([str(x) for x in df_fishing["지역"].unique() if str(x).strip() != ""])
-                    filter_region = st.selectbox("지역 선택", r_list, key="f_reg")
-                with f4:
-                    n_list = ["전체보기"] + sorted([str(x) for x in df_fishing["선사명"].unique() if str(x).strip() != ""])
-                    filter_name = st.selectbox("선사명 직접 선택", n_list, key="f_name")
+            st.dataframe(df_fishing, use_container_width=True, hide_index=True)
 
-            # 필터링 적용
-            f_df = df_fishing.copy()
-            if filter_main != "전체보기": f_df = f_df[f_df["주요 관심 선사"].astype(str).str.upper() == filter_main]
-            if filter_logman != "전체보기": f_df = f_df[f_df["로구만 프렌즈 선사"].astype(str).str.upper() == filter_logman]
-            if filter_region != "전체보기": f_df = f_df[f_df["지역"].astype(str) == filter_region]
-            if filter_name != "전체보기": f_df = f_df[f_df["선사명"].astype(str) == filter_name]
-
-            st.write(f"검색 결과: **{len(f_df)}** 건")
-            
-            # 💡 데이터를 예쁘게 출력 (체크박스 형태 및 링크)
-            display_df = f_df.copy()
-            # 데이터프레임 출력
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "예약사이트": st.column_config.LinkColumn("예약사이트 바로가기")
-                }
-            )
-        else:
-            st.warning("표시할 선사 정보가 없습니다. 구글 드라이브 엑셀 상태를 확인해 주세요.")
-
-    # --- [탭 3] 낚시 사진 ---
+    # --- [탭 3] 📸 낚시사진 ---
     with tab3:
         st.subheader("📸 낚시의 추억")
         st.write("멋진 조과 사진을 기다립니다!")
