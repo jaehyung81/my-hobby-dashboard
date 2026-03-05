@@ -285,83 +285,84 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    # ✨ 전국구 낚시 포인트 완벽 매핑 사전 추가! (고성 대진항 -> 속초 관측소 연결)
+                    # ✨ [재형님 명탐정 패치] 찾아주신 신규 지역코드로 완벽 교체 완료!
                     obs_map = {
-                        "군산": "DT_0026", "비응": "DT_0026", "야미도": "DT_0026", "선유도": "DT_0026", "새만금": "DT_0026",
-                        "보령": "DT_0031", "대천": "DT_0031", "무창포": "DT_0031", "오천": "DT_0031", "회변": "DT_0031",
-                        "태안": "DT_0035", "안흥": "DT_0035", "신진도": "DT_0035", "백사장": "DT_0035", "안면도": "DT_0035", "영목": "DT_0035", "마검포": "DT_0035",
-                        "서천": "DT_0028", "홍원": "DT_0028", "마량": "DT_0028",
-                        "당진": "DT_0033", "장고항": "DT_0033", "도비도": "DT_0033",
-                        "시흥": "DT_0041", "오이도": "DT_0041", "시화": "DT_0041",
+                        "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
+                        "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
+                        "태안": "DT_0050", "안흥": "DT_0067", "신진도": "DT_0067", "백사장": "DT_0067", "안면도": "DT_0067", "영목": "DT_0067", "마검포": "DT_0067",
+                        "서천": "DT_0051", "홍원": "DT_0051", "마량": "DT_0051", "장항": "DT_0024",
+                        "당진": "DT_0017", "장고항": "DT_0017", "도비도": "DT_0017", "대산": "DT_0017",
+                        "시흥": "DT_0008", "오이도": "DT_0008", "시화": "DT_0008", "안산": "DT_0008",
                         "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
-                        "고성": "DT_0005", "대진": "DT_0005", "공현진": "DT_0005", "속초": "DT_0005", "아야진": "DT_0005",
-                        "강릉": "DT_0042", "동해": "DT_0042", "묵호": "DT_0042", "삼척": "DT_0042", "임원": "DT_0042",
-                        "포항": "DT_0012", "경주": "DT_0012", "감포": "DT_0012",
-                        "부산": "DT_0004", "해운대": "DT_0004", "가덕도": "DT_0004",
-                        "여수": "DT_0007", "돌산": "DT_0007", "국동": "DT_0007",
-                        "고흥": "DT_0015", "녹동": "DT_0015", "나로도": "DT_0015",
-                        "통영": "DT_0009", "거제": "DT_0009", "삼천포": "DT_0009",
-                        "목포": "DT_0010", "진도": "DT_0032", "완도": "DT_0032",
-                        "제주": "DT_0011", "서귀포": "DT_0013", "성산": "DT_0011", "모슬포": "DT_0013"
+                        "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
                     }
                     
-                    # 사전에 없으면 기본값으로 군산을 던집니다.
-                    obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
+                    # 사전에 없으면 기본값 군산(DT_0018)
+                    obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0018")
                     
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             req_date_str = t_date.strftime("%Y%m%d")
                             
-                            # ✨ [핵심 해결] 무조건 공공데이터포털(apis.data.go.kr) 주소 고정! 
-                            # 중복 파라미터를 제거하고 numOfRows=1000을 줘서 하루치 데이터를 다 받은 뒤 맨 마지막 실시간 데이터만 쏙 빼옵니다!
-                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1000&type=json"
+                            # ✨ [핵심] 공공데이터포털(apis.data.go.kr) 전용 주소 1/2단계 로직 적용
+                            # 1단계: 오늘 데이터 총 몇 개인지 물어보기
+                            url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
                             
-                            res = requests.get(obs_url, timeout=10)
-                            
-                            if res.status_code == 200:
+                            res_1 = requests.get(url_1, timeout=10)
+                            if res_1.status_code == 200:
                                 try:
-                                    data = res.json()
-                                    header = data.get("response", {}).get("header", {})
-                                    result_code = header.get("resultCode", "")
-                                    result_msg = header.get("resultMsg", "")
+                                    data1 = res_1.json()
+                                    header1 = data1.get("response", {}).get("header", {})
+                                    body1 = data1.get("response", {}).get("body", {})
                                     
-                                    if result_code == "00":
-                                        body = data.get("response", {}).get("body", {})
-                                        raw_items = body.get("items")
-                                        items = []
+                                    if header1.get("resultCode") == "00":
+                                        total_count = body1.get("totalCount", 0)
                                         
-                                        if raw_items:
+                                        if total_count > 0:
+                                            # 2단계: 제일 마지막 거(실시간) 딱 1개만 가져오기
+                                            url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
+                                            res_2 = requests.get(url_2, timeout=10)
+                                            data2 = res_2.json()
+                                            
+                                            body2 = data2.get("response", {}).get("body", {})
+                                            raw_items = body2.get("items", {})
+                                            
+                                            items = []
                                             if isinstance(raw_items, dict) and "item" in raw_items:
                                                 item_val = raw_items["item"]
                                                 items = item_val if isinstance(item_val, list) else [item_val]
                                             elif isinstance(raw_items, list):
                                                 items = raw_items
                                                 
-                                        if items:
-                                            # ✨ 가장 최신 데이터 추출 (하루 치 중 맨 마지막 리스트)
-                                            curr_data = items[-1] 
-                                            
-                                            w1, w2, w3 = st.columns(3)
-                                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wspd', '-')} m/s")
-                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', '-')} ℃")
-                                            w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', '-')} cm")
-                                            
-                                            obs_time = curr_data.get('obsrvnDt', '알수없음')
-                                            obs_name = curr_data.get('obsvtrNm', '알수없음')
-                                            st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
+                                            if items:
+                                                curr_data = items[-1]
+                                                w1, w2, w3 = st.columns(3)
+                                                
+                                                # 새로운 암호명 매핑 (wspd, wtem, bscTdlvHgt)
+                                                wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
+                                                w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
+                                                w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
+                                                w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
+                                                
+                                                obs_time = curr_data.get('obsrvnDt', '알수없음')
+                                                obs_name = curr_data.get('obsvtrNm', '알수없음')
+                                                st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
+                                            else:
+                                                st.warning("⚠️ 데이터 파싱 오류: 구조가 예상과 다릅니다.")
                                         else:
                                             if t_date > today:
                                                 st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 참고)")
                                             else:
-                                                st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 업데이트되지 않았습니다.")
+                                                st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
                                     else:
-                                        st.error(f"🚨 공공데이터포털 서버 지연: {result_msg}")
+                                        msg = header1.get("resultMsg", "알수없는 에러")
+                                        st.error(f"🚨 공공데이터포털 서버 지연: {msg} (코드: {header1.get('resultCode')})")
                                         
                                 except ValueError:
                                     st.error("🚨 API 응답 에러! (공공데이터포털 서버 통신 오류)")
                             else:
-                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res.status_code}")
+                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res_1.status_code}")
                         else:
                             st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
                     except Exception as e:
