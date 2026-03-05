@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import requests
+import urllib.request
 import io
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
@@ -22,6 +23,10 @@ st.markdown("""
 FISHING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1169225155&single=true&output=csv"
 CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1183615157&single=true&output=csv"
 
+# ✨ [공통 편집 URL] 어디서든 쓸 수 있게 위로 올렸습니다!
+REAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
+
+# ✨ [데이터 로드 방어막]
 @st.cache_data(ttl=600)
 def load_data(url):
     try:
@@ -30,9 +35,15 @@ def load_data(url):
         }
         res = requests.get(url, headers=headers, timeout=10)
         res.raise_for_status() 
+        res.encoding = 'utf-8'
         return pd.read_csv(io.StringIO(res.text)).fillna("")
     except Exception:
-        return pd.DataFrame()
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                return pd.read_csv(response, encoding='utf-8').fillna("")
+        except Exception:
+            return pd.DataFrame()
 
 # 데이터 로딩
 df_fishing = load_data(FISHING_CSV)
@@ -71,6 +82,7 @@ def get_next_lunar_date(m, d):
         target = date(calendar.solarYear, calendar.solarMonth, calendar.solarDay)
     return target
 
+# 📋 고정 기념일 정의 (매년 반복)
 fixed_events = {
     "💰 로또 사는 날": (today + timedelta(days=(3 - today.weekday()) % 7)),
     "👦 은호 생일": get_next_date(7, 10),
@@ -80,14 +92,13 @@ fixed_events = {
     "💍 결혼기념일": get_next_date(4, 22),
 }
 
-# --- 🏠 홈 메뉴 ---
+# --- 🏠 홈 메뉴 (D-Day 통합 및 검색창) ---
 if menu == "🏠 홈":
     st.title("환영합니다! 재형님 👋")
     st.subheader("🗓️ 주요 일정 (D-Day)")
     
     combined_all = fixed_events.copy()
     
-    # ✨ 에러 방어: '일자'와 '내용' 컬럼이 진짜 있을 때만 실행!
     if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
         for _, row in df_events.iterrows():
             try:
@@ -132,7 +143,7 @@ if menu == "🏠 홈":
     l2.link_button("✨ Gemini 메인", "https://gemini.google.com/", use_container_width=True)
     l3.link_button("📂 구글 드라이브", "https://drive.google.com/", use_container_width=True)
 
-# --- 🗓️ 일정 메뉴 ---
+# --- 🗓️ 일정 메뉴 (상세 관리) ---
 elif menu == "🗓️ 일정":
     st.title("상세 일정 및 메모 관리 🗓️")
     
@@ -144,8 +155,7 @@ elif menu == "🗓️ 일정":
         
         st.info("💡 일정과 메모는 아래 구글 시트에서 관리하세요.")
         
-        real_sheet_url = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
-        st.link_button("📊 구글 시트 직접 편집하기", real_sheet_url, use_container_width=True, type="primary")
+        st.link_button("📊 구글 시트 직접 편집하기", REAL_SHEET_URL, use_container_width=True, type="primary")
 
         st.divider()
 
@@ -175,7 +185,6 @@ elif menu == "🗓️ 일정":
                 st.success(f"📌 **[고정] {name}**")
                 found_on_date = True
         
-        # ✨ 에러 방어막
         if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
@@ -211,11 +220,17 @@ elif menu == "🗓️ 일정":
                     continue
         
         if all_combined_list:
-            display_df = pd.DataFrame(all_combined_list).sort_values(by="날짜")
-            display_df['D-Day'] = display_df['날짜'].apply(
-                lambda x: f"D-{(x-today).days}" if x > today else ("Today" if x == today else f"D+{abs((x-today).days)}")
-            )
-            st.dataframe(display_df[['날짜', 'D-Day', '내용', '출처']], use_container_width=True, hide_index=True)
+            # ✨ [버그 픽스] 오늘 기준 지나간 날짜(D+)는 제외하도록 필터링!
+            future_events = [item for item in all_combined_list if item["날짜"] >= today]
+            
+            if future_events:
+                display_df = pd.DataFrame(future_events).sort_values(by="날짜")
+                display_df['D-Day'] = display_df['날짜'].apply(
+                    lambda x: f"D-{(x-today).days}" if x > today else "Today"
+                )
+                st.dataframe(display_df[['날짜', 'D-Day', '내용', '출처']], use_container_width=True, hide_index=True)
+            else:
+                st.info("예정된 일정이 없습니다.")
         
 elif menu == "👨‍👩‍👦‍👦 가족":
     st.title("사랑하는 우리 가족 ❤️")
@@ -227,8 +242,8 @@ elif menu == "👨‍👩‍👦‍👦 가족":
             df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
             st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
         else:
-            st.error("🚨 엑셀 형식이 아닙니다. 방화벽 차단으로 인해 엑셀 대신 회사 안내 페이지가 로드되었습니다.")
-            with st.expander("🔍 파이썬이 실제로 다운받은 데이터 원본 보기", expanded=True):
+            st.error("🚨 엑셀 데이터 형식을 불러오는 중 오류가 발생했습니다.")
+            with st.expander("🔍 다운받은 데이터 확인", expanded=True):
                 st.dataframe(df_events.head(5))
     else:
         st.info("💡 구글 드라이브의 엑셀 파일에 일정을 입력하면 여기에 나타납니다.")
@@ -260,7 +275,6 @@ elif menu == "🎣 낚시":
         st.subheader("📅 원클릭 출조 및 실시간 정보")
         
         if not df_fishing.empty:
-            # ✨ 에러 방어: '지역' 컬럼이 진짜 있을 때만 정상 실행!
             if "지역" in df_fishing.columns and "선사명" in df_fishing.columns:
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -317,8 +331,7 @@ elif menu == "🎣 낚시":
                                     st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
             
             else:
-                # 방화벽에 차단당해서 이상한 HTML을 가져왔을 때 보여주는 화면!
-                st.error("🚨 엑셀의 '지역' 컬럼을 찾을 수 없습니다! (회사 보안망이 엑셀 다운로드를 낚아채고 차단 경고창을 보낸 상태입니다.)")
+                st.error("🚨 한글 인코딩 또는 컬럼 누락 에러!")
                 with st.expander("🔍 파이썬이 실제로 구글에서 받아온 데이터 내용 보기", expanded=True):
                     st.dataframe(df_fishing.head(5))
 
@@ -326,11 +339,18 @@ elif menu == "🎣 낚시":
             st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
 
     with tab2:
-        st.subheader("🚢 등록된 전체 선사 정보")
+        # ✨ [선사정보 탭] 구글 시트 편집 버튼 추가!
+        col_t1, col_t2 = st.columns([3, 1])
+        with col_t1:
+            st.subheader("🚢 등록된 전체 선사 정보")
+        with col_t2:
+            st.write("") # 버튼 위치를 살짝 내리기 위한 빈 공간
+            st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
+            
         if not df_fishing.empty and "지역" in df_fishing.columns:
             st.dataframe(df_fishing, use_container_width=True, hide_index=True)
         else:
-            st.write("로컬 방화벽 차단으로 인해 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
+            st.write("로컬 환경 제한으로 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
 
     with tab3:
         st.subheader("📸 낚시의 추억")
