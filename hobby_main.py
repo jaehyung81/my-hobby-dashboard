@@ -288,7 +288,6 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    # 관측소 매핑 (인천/연안부두/영종도 등 추가)
                     obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035", "시화": "DT_0041", "오이도": "DT_0041", "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "백사장항": "DT_0035", "안면도": "DT_0035", "장고항": "DT_0033", "홍원항": "DT_0028"}
                     obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
                     
@@ -296,32 +295,48 @@ elif menu == "🎣 낚시":
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             
-                            # ✨ 필수 파라미터인 날짜(Date) 추가 및 원래 주소로 복귀!
+                            # ✨ [업데이트 핵심!] 공공데이터포털(data.go.kr) 전용 URL과 파라미터로 완전히 교체!
                             today_str = date.today().strftime("%Y%m%d")
-                            obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&Date={today_str}&ResultType=json"
+                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&pageNo=1&numOfRows=10&type=json&obsCode={obs_code}&reqDate={today_str}"
                             
-                            res = requests.get(obs_url, timeout=5)
+                            res = requests.get(obs_url, timeout=10) # 공공 API는 응답이 조금 느릴 수 있어 10초로 연장
                             
                             if res.status_code == 200:
-                                data = res.json()
-                                if "result" in data and "data" in data["result"]:
-                                    res_data = data["result"]["data"]
-                                    if isinstance(res_data, list) and len(res_data) > 0:
-                                        # ✨ 하루치 리스트 중 맨 마지막(-1)에 있는 실시간 데이터 추출
-                                        curr_data = res_data[-1] 
+                                try:
+                                    data = res.json()
+                                    items = []
+                                    
+                                    # 공공데이터포털 표준 구조에서 데이터 뽑기
+                                    if "response" in data and "body" in data.get("response", {}):
+                                        body = data["response"]["body"]
+                                        if "items" in body and body["items"]:
+                                            items = body["items"].get("item", [])
+                                    # KHOA 구버전 구조로 들어올 경우를 대비한 2중 안전장치
+                                    elif "result" in data and "data" in data.get("result", {}):
+                                        items = data["result"]["data"]
+                                        
+                                    if isinstance(items, list) and len(items) > 0:
+                                        curr_data = items[-1] # 리스트의 맨 마지막(최신) 데이터
                                         
                                         w1, w2, w3 = st.columns(3)
-                                        w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
+                                        # wind_speed와 wind_spd 둘 다 대응
+                                        wind_val = curr_data.get('wind_speed', curr_data.get('wind_spd', '-'))
+                                        w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
                                         w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
                                         w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
-                                        st.caption(f"🕒 관측 시간: {curr_data.get('record_time', '알수없음')}")
+                                        
+                                        obs_time = curr_data.get('record_time', curr_data.get('obs_time', '알수없음'))
+                                        st.caption(f"🕒 관측 시간: {obs_time}")
                                     else:
-                                        st.warning("⚠️ 관측소 데이터가 비어있습니다.")
-                                else:
-                                    error_msg = data.get("result", {}).get("msg", str(data))
-                                    st.warning(f"⚠️ KHOA API 거절 원인: {error_msg}")
+                                        st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
+                                        
+                                except ValueError:
+                                    # API 키 오류 등으로 JSON이 아니라 XML(태그) 에러 페이지가 날아왔을 때의 처리!
+                                    st.error("🚨 API 인증 에러! (키 값이 잘못되었거나 공공데이터포털 서버 지연)")
+                                    with st.expander("🔍 에러 메시지 원본 보기"):
+                                        st.text(res.text[:500])
                             else:
-                                st.error(f"🚨 API 호출 실패! 상태코드: {res.status_code}")
+                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res.status_code}")
                         else:
                             st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
                     except Exception as e:
