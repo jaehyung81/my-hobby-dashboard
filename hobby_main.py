@@ -285,55 +285,83 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035", "시화": "DT_0041", "오이도": "DT_0041", "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "백사장항": "DT_0035", "안면도": "DT_0035", "장고항": "DT_0033", "홍원항": "DT_0028"}
+                    # ✨ 전국구 낚시 포인트 완벽 매핑 사전 추가! (고성 대진항 -> 속초 관측소 연결)
+                    obs_map = {
+                        "군산": "DT_0026", "비응": "DT_0026", "야미도": "DT_0026", "선유도": "DT_0026", "새만금": "DT_0026",
+                        "보령": "DT_0031", "대천": "DT_0031", "무창포": "DT_0031", "오천": "DT_0031", "회변": "DT_0031",
+                        "태안": "DT_0035", "안흥": "DT_0035", "신진도": "DT_0035", "백사장": "DT_0035", "안면도": "DT_0035", "영목": "DT_0035", "마검포": "DT_0035",
+                        "서천": "DT_0028", "홍원": "DT_0028", "마량": "DT_0028",
+                        "당진": "DT_0033", "장고항": "DT_0033", "도비도": "DT_0033",
+                        "시흥": "DT_0041", "오이도": "DT_0041", "시화": "DT_0041",
+                        "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
+                        "고성": "DT_0005", "대진": "DT_0005", "공현진": "DT_0005", "속초": "DT_0005", "아야진": "DT_0005",
+                        "강릉": "DT_0042", "동해": "DT_0042", "묵호": "DT_0042", "삼척": "DT_0042", "임원": "DT_0042",
+                        "포항": "DT_0012", "경주": "DT_0012", "감포": "DT_0012",
+                        "부산": "DT_0004", "해운대": "DT_0004", "가덕도": "DT_0004",
+                        "여수": "DT_0007", "돌산": "DT_0007", "국동": "DT_0007",
+                        "고흥": "DT_0015", "녹동": "DT_0015", "나로도": "DT_0015",
+                        "통영": "DT_0009", "거제": "DT_0009", "삼천포": "DT_0009",
+                        "목포": "DT_0010", "진도": "DT_0032", "완도": "DT_0032",
+                        "제주": "DT_0011", "서귀포": "DT_0013", "성산": "DT_0011", "모슬포": "DT_0013"
+                    }
+                    
+                    # 사전에 없으면 기본값으로 군산을 던집니다.
                     obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
                     
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
+                            req_date_str = t_date.strftime("%Y%m%d")
                             
-                            # ✨ [핵심 해결] 고흥이 튀어나오는 버그를 막기 위해 '가장 안전한 주소(tideObs)'로 회귀 + '가장 최신 1개'만 가져오는 초강력 파라미터 적용!
-                            today_str = date.today().strftime("%Y%m%d")
-                            obs_url = f"http://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&Date={today_str}&ResultType=json"
+                            # ✨ [핵심 해결] 무조건 공공데이터포털(apis.data.go.kr) 주소 고정! 
+                            # 중복 파라미터를 제거하고 numOfRows=1000을 줘서 하루치 데이터를 다 받은 뒤 맨 마지막 실시간 데이터만 쏙 빼옵니다!
+                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1000&type=json"
                             
                             res = requests.get(obs_url, timeout=10)
                             
                             if res.status_code == 200:
                                 try:
                                     data = res.json()
+                                    header = data.get("response", {}).get("header", {})
+                                    result_code = header.get("resultCode", "")
+                                    result_msg = header.get("resultMsg", "")
                                     
-                                    # KHOA 오리지널 구조 방어막
-                                    if "result" in data and "data" in data["result"]:
-                                        items = data["result"]["data"]
+                                    if result_code == "00":
+                                        body = data.get("response", {}).get("body", {})
+                                        raw_items = body.get("items")
+                                        items = []
                                         
-                                        if isinstance(items, list) and len(items) > 0:
-                                            # 가장 최신 데이터(-1)를 가져옵니다.
-                                            curr_data = items[-1]
-                                            
-                                            # 관측소 이름이 우리가 원한 곳이 맞는지 다시 한 번 체크! (버그 방지)
-                                            obs_name = curr_data.get('obsvtr_nm', curr_data.get('obsvtrNm', '알수없음'))
+                                        if raw_items:
+                                            if isinstance(raw_items, dict) and "item" in raw_items:
+                                                item_val = raw_items["item"]
+                                                items = item_val if isinstance(item_val, list) else [item_val]
+                                            elif isinstance(raw_items, list):
+                                                items = raw_items
+                                                
+                                        if items:
+                                            # ✨ 가장 최신 데이터 추출 (하루 치 중 맨 마지막 리스트)
+                                            curr_data = items[-1] 
                                             
                                             w1, w2, w3 = st.columns(3)
+                                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wspd', '-')} m/s")
+                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', '-')} ℃")
+                                            w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', '-')} cm")
                                             
-                                            # 오리지널 암호명 매핑 (wind_speed, water_temp, tide_level)
-                                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
-                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
-                                            w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
-                                            
-                                            obs_time = curr_data.get('record_time', curr_data.get('obsrvnDt', '알수없음'))
+                                            obs_time = curr_data.get('obsrvnDt', '알수없음')
+                                            obs_name = curr_data.get('obsvtrNm', '알수없음')
                                             st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
                                         else:
                                             if t_date > today:
-                                                st.info("🔮 미래 날짜는 실시간 데이터가 없습니다. (바다타임 링크 참고)")
+                                                st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 참고)")
                                             else:
-                                                st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
+                                                st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 업데이트되지 않았습니다.")
                                     else:
-                                        st.error(f"🚨 API 데이터 구조 오류: 서버가 데이터를 비워 보냈습니다.")
+                                        st.error(f"🚨 공공데이터포털 서버 지연: {result_msg}")
                                         
                                 except ValueError:
-                                    st.error("🚨 API 응답 에러! (서버 지연)")
+                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 통신 오류)")
                             else:
-                                st.error(f"🚨 API 서버 통신 실패! 상태코드: {res.status_code}")
+                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res.status_code}")
                         else:
                             st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
                     except Exception as e:
@@ -364,11 +392,4 @@ elif menu == "🎣 낚시":
             st.write("") 
             st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
             
-        if not df_fishing.empty and "지역" in df_fishing.columns:
-            st.dataframe(df_fishing, use_container_width=True, hide_index=True)
-        else:
-            st.write("로컬 환경 제한으로 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
-
-    with tab3:
-        st.subheader("📸 낚시의 추억")
-        st.info("여기에 낚시 사진 갤러리 기능을 추가할 예정입니다!")
+        if not df_fishing.
