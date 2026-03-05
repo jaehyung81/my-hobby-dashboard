@@ -392,4 +392,11 @@ elif menu == "🎣 낚시":
             st.write("") 
             st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
             
-        if not df_fishing.
+        if not df_fishing.empty and "지역" in df_fishing.columns:
+            st.dataframe(df_fishing, use_container_width=True, hide_index=True)
+        else:
+            st.write("로컬 환경 제한으로 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
+
+    with tab3:
+        st.subheader("📸 낚시의 추억")
+        st.info("여기에 낚시 사진 갤러리 기능을 추가할 예정입니다!")
