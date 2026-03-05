@@ -43,7 +43,6 @@ def load_data(url):
         except Exception:
             return pd.DataFrame()
 
-# 데이터 로딩
 df_fishing = load_data(FISHING_CSV)
 df_events = load_data(CALENDAR_CSV)
 
@@ -293,46 +292,61 @@ elif menu == "🎣 낚시":
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             
-                            today_str = date.today().strftime("%Y%m%d")
-                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&pageNo=1&numOfRows=10&type=json&obsCode={obs_code}&reqDate={today_str}"
+                            # ✨ 선택한 날짜(t_date)를 API에 전달하도록 수정!
+                            req_date_str = t_date.strftime("%Y%m%d")
+                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&pageNo=1&numOfRows=10&type=json&obsCode={obs_code}&reqDate={req_date_str}"
                             
                             res = requests.get(obs_url, timeout=10)
                             
                             if res.status_code == 200:
                                 try:
                                     data = res.json()
-                                    items = []
+                                    header = data.get("response", {}).get("header", {})
+                                    result_code = header.get("resultCode", "")
+                                    result_msg = header.get("resultMsg", "")
                                     
-                                    # ✨ [업그레이드] 어떤 모양의 박스로 오든 다 뜯어냅니다!
-                                    if "response" in data and "body" in data.get("response", {}):
-                                        body = data["response"]["body"]
-                                        if body.get("items"):
-                                            raw_item = body["items"].get("item", [])
-                                            if isinstance(raw_item, list):
-                                                items = raw_item
-                                            elif isinstance(raw_item, dict):
-                                                items = [raw_item]
-                                    
-                                    # 데이터가 존재할 경우 화면에 뿌리기
-                                    if items:
-                                        curr_data = items[-1]
-                                        w1, w2, w3 = st.columns(3)
-                                        wind_val = curr_data.get('wind_speed', curr_data.get('wind_spd', '-'))
-                                        w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                        w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
-                                        w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                    # ✨ 서버 통신 성공 (00) 일 때
+                                    if result_code == "00":
+                                        body = data.get("response", {}).get("body", {})
+                                        raw_items = body.get("items")
+                                        items = []
                                         
-                                        obs_time = curr_data.get('record_time', curr_data.get('obs_time', '알수없음'))
-                                        st.caption(f"🕒 관측 시간: {obs_time}")
+                                        # 박스 포장 뜯기 (1개일 때와 여러개일 때 방어)
+                                        if raw_items:
+                                            if isinstance(raw_items, dict) and "item" in raw_items:
+                                                item_val = raw_items["item"]
+                                                items = item_val if isinstance(item_val, list) else [item_val]
+                                            elif isinstance(raw_items, list):
+                                                items = raw_items
+                                                
+                                        # 데이터가 있으면 뿌려줍니다!
+                                        if items:
+                                            curr_data = items[-1]
+                                            w1, w2, w3 = st.columns(3)
+                                            wind_val = curr_data.get('wind_speed', curr_data.get('wind_spd', '-'))
+                                            w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
+                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
+                                            w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                            
+                                            obs_time = curr_data.get('record_time', curr_data.get('obs_time', '알수없음'))
+                                            st.caption(f"🕒 관측 시간: {obs_time}")
+                                        else:
+                                            # ✨ 미래 날짜를 선택했을 때의 친절한 안내 메시지!
+                                            if t_date > today:
+                                                st.info("🔮 미래 날짜는 아직 관측된 데이터가 없습니다. (상세 물때표 바다타임 링크를 참고해주세요!)")
+                                            else:
+                                                st.warning("⚠️ 해당 관측소의 데이터가 아직 업데이트되지 않았거나 점검 중입니다.")
+                                    
+                                    # ✨ 서버 통신 에러 (API 키 오류, 파라미터 오류 등)
                                     else:
-                                        # ✨ [엑스레이 장착] 진짜 데이터가 비어있다면 서버가 준 편지(JSON) 원본을 그대로 노출!
-                                        st.warning("⚠️ API 통신은 성공했으나, 공공데이터포털에서 받은 상자(데이터)가 비어있습니다!")
-                                        with st.expander("🔍 공공데이터포털 서버 응답 원본(JSON) 보기", expanded=True):
+                                        st.error(f"🚨 공공데이터포털 거절 사유: {result_msg} (코드: {result_code})")
+                                        # 굳이 펼쳐서 안 봐도 되게 기본은 닫아둡니다!
+                                        with st.expander("🔍 에러 데이터 원본 확인 (필요시 클릭)", expanded=False):
                                             st.json(data)
-                                        
+                                            
                                 except ValueError:
-                                    st.error("🚨 API 인증 에러! (공공데이터포털 서버 지연)")
-                                    with st.expander("🔍 에러 메시지 원본 보기"):
+                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 지연)")
+                                    with st.expander("🔍 에러 메시지 원본 보기", expanded=False):
                                         st.text(res.text[:500])
                             else:
                                 st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res.status_code}")
