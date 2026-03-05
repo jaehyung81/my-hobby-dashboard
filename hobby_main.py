@@ -291,70 +291,49 @@ elif menu == "🎣 낚시":
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
-                            req_date_str = t_date.strftime("%Y%m%d")
                             
-                            # ✨ 1차 찌르기: "오늘 데이터 총 몇 개야?"
-                            url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&ObsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
-                            res_1 = requests.get(url_1, timeout=10)
+                            # ✨ [핵심 해결] 고흥이 튀어나오는 버그를 막기 위해 '가장 안전한 주소(tideObs)'로 회귀 + '가장 최신 1개'만 가져오는 초강력 파라미터 적용!
+                            today_str = date.today().strftime("%Y%m%d")
+                            obs_url = f"http://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&Date={today_str}&ResultType=json"
                             
-                            if res_1.status_code == 200:
+                            res = requests.get(obs_url, timeout=10)
+                            
+                            if res.status_code == 200:
                                 try:
-                                    data1 = res_1.json()
-                                    # 공공데이터포털의 다양한 껍데기 포맷을 모두 커버하는 방어막
-                                    header1 = data1.get("header", data1.get("response", {}).get("header", {}))
-                                    body1 = data1.get("body", data1.get("response", {}).get("body", {}))
+                                    data = res.json()
                                     
-                                    if header1.get("resultCode") == "00":
-                                        total_count = body1.get("totalCount", 0)
+                                    # KHOA 오리지널 구조 방어막
+                                    if "result" in data and "data" in data["result"]:
+                                        items = data["result"]["data"]
                                         
-                                        if total_count > 0:
-                                            # ✨ 2차 찌르기: "그럼 제일 마지막 거(실시간) 딱 1개만 줘!"
-                                            url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&ObsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
-                                            res_2 = requests.get(url_2, timeout=10)
-                                            data2 = res_2.json()
+                                        if isinstance(items, list) and len(items) > 0:
+                                            # 가장 최신 데이터(-1)를 가져옵니다.
+                                            curr_data = items[-1]
                                             
-                                            body2 = data2.get("body", data2.get("response", {}).get("body", {}))
-                                            raw_items = body2.get("items", {})
+                                            # 관측소 이름이 우리가 원한 곳이 맞는지 다시 한 번 체크! (버그 방지)
+                                            obs_name = curr_data.get('obsvtr_nm', curr_data.get('obsvtrNm', '알수없음'))
                                             
-                                            items = []
-                                            if isinstance(raw_items, dict) and "item" in raw_items:
-                                                item_val = raw_items["item"]
-                                                items = item_val if isinstance(item_val, list) else [item_val]
-                                            elif isinstance(raw_items, list):
-                                                items = raw_items
-                                                
-                                            if items:
-                                                curr_data = items[-1]
-                                                w1, w2, w3 = st.columns(3)
-                                                
-                                                # 새로운 암호명 매핑 (wspd, wtem, bscTdlvHgt)
-                                                wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
-                                                w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                                w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
-                                                w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
-                                                
-                                                obs_time = curr_data.get('obsrvnDt', '알수없음')
-                                                obs_name = curr_data.get('obsvtrNm', '알수없음')
-                                                st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
-                                                
-                                                # 관측소가 엉뚱하게 나왔을 때의 알림
-                                                if obs_name != "알수없음" and "군산" in sel_region and "고흥" in obs_name:
-                                                    st.warning("⚠️ 공공데이터포털 서버 일시 오류로 다른 관측소(고흥) 데이터가 표출되었습니다. 잠시 후 다시 시도해주세요.")
-                                            else:
-                                                st.warning("⚠️ 데이터 파싱 오류: 구조가 예상과 다릅니다.")
+                                            w1, w2, w3 = st.columns(3)
+                                            
+                                            # 오리지널 암호명 매핑 (wind_speed, water_temp, tide_level)
+                                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
+                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
+                                            w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                            
+                                            obs_time = curr_data.get('record_time', curr_data.get('obsrvnDt', '알수없음'))
+                                            st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
                                         else:
                                             if t_date > today:
-                                                st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 링크를 참고하세요!)")
+                                                st.info("🔮 미래 날짜는 실시간 데이터가 없습니다. (바다타임 링크 참고)")
                                             else:
                                                 st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
                                     else:
-                                        msg = header1.get("resultMsg", "알수없는 에러")
-                                        st.error(f"🚨 공공데이터포털 서버 거절: {msg} (코드: {header1.get('resultCode')})")
+                                        st.error(f"🚨 API 데이터 구조 오류: 서버가 데이터를 비워 보냈습니다.")
                                         
                                 except ValueError:
-                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 점검 중)")
+                                    st.error("🚨 API 응답 에러! (서버 지연)")
                             else:
-                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res_1.status_code}")
+                                st.error(f"🚨 API 서버 통신 실패! 상태코드: {res.status_code}")
                         else:
                             st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
                     except Exception as e:
