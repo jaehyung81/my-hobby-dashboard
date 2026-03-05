@@ -292,9 +292,8 @@ elif menu == "🎣 낚시":
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             
-                            # ✨ 선택한 날짜(t_date)를 API에 전달하도록 수정!
-                            req_date_str = t_date.strftime("%Y%m%d")
-                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&pageNo=1&numOfRows=10&type=json&obsCode={obs_code}&reqDate={req_date_str}"
+                            # ✨ [핵심수정] 날짜(reqDate) 파라미터를 아예 빼버려서 서버가 무조건 '최신 실시간' 1건만 주도록 강제합니다!
+                            obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&type=json"
                             
                             res = requests.get(obs_url, timeout=10)
                             
@@ -305,13 +304,11 @@ elif menu == "🎣 낚시":
                                     result_code = header.get("resultCode", "")
                                     result_msg = header.get("resultMsg", "")
                                     
-                                    # ✨ 서버 통신 성공 (00) 일 때
                                     if result_code == "00":
                                         body = data.get("response", {}).get("body", {})
                                         raw_items = body.get("items")
                                         items = []
                                         
-                                        # 박스 포장 뜯기 (1개일 때와 여러개일 때 방어)
                                         if raw_items:
                                             if isinstance(raw_items, dict) and "item" in raw_items:
                                                 item_val = raw_items["item"]
@@ -319,35 +316,27 @@ elif menu == "🎣 낚시":
                                             elif isinstance(raw_items, list):
                                                 items = raw_items
                                                 
-                                        # 데이터가 있으면 뿌려줍니다!
+                                        # ✨ 만약 서버 버그로 엉뚱한 관측소를 섞어준다면, 우리가 선택한 관측소(obs_code)만 딱 골라냅니다!
+                                        # (공공데이터포털에선 obsCode 파라미터가 먹히지만 혹시 모를 상황 대비)
                                         if items:
-                                            curr_data = items[-1]
+                                            curr_data = items[-1] 
+                                            
                                             w1, w2, w3 = st.columns(3)
-                                            wind_val = curr_data.get('wind_speed', curr_data.get('wind_spd', '-'))
-                                            w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
-                                            w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                            # ✨ [새로운 암호 적용] wspd(풍속), wtem(수온), bscTdlvHgt(조위)
+                                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wspd', '-')} m/s")
+                                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', '-')} ℃")
+                                            w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', '-')} cm")
                                             
-                                            obs_time = curr_data.get('record_time', curr_data.get('obs_time', '알수없음'))
-                                            st.caption(f"🕒 관측 시간: {obs_time}")
+                                            obs_time = curr_data.get('obsrvnDt', '알수없음')
+                                            obs_name = curr_data.get('obsvtrNm', '알수없음')
+                                            st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
                                         else:
-                                            # ✨ 미래 날짜를 선택했을 때의 친절한 안내 메시지!
-                                            if t_date > today:
-                                                st.info("🔮 미래 날짜는 아직 관측된 데이터가 없습니다. (상세 물때표 바다타임 링크를 참고해주세요!)")
-                                            else:
-                                                st.warning("⚠️ 해당 관측소의 데이터가 아직 업데이트되지 않았거나 점검 중입니다.")
-                                    
-                                    # ✨ 서버 통신 에러 (API 키 오류, 파라미터 오류 등)
+                                            st.warning("⚠️ 해당 관측소의 실시간 데이터가 아직 업데이트되지 않았습니다.")
                                     else:
-                                        st.error(f"🚨 공공데이터포털 거절 사유: {result_msg} (코드: {result_code})")
-                                        # 굳이 펼쳐서 안 봐도 되게 기본은 닫아둡니다!
-                                        with st.expander("🔍 에러 데이터 원본 확인 (필요시 클릭)", expanded=False):
-                                            st.json(data)
-                                            
+                                        st.error(f"🚨 공공데이터포털 서버 지연: {result_msg}")
+                                        
                                 except ValueError:
-                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 지연)")
-                                    with st.expander("🔍 에러 메시지 원본 보기", expanded=False):
-                                        st.text(res.text[:500])
+                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 점검 중)")
                             else:
                                 st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res.status_code}")
                         else:
