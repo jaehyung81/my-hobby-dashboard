@@ -23,7 +23,7 @@ st.markdown("""
 FISHING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1169225155&single=true&output=csv"
 CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1183615157&single=true&output=csv"
 
-# ✨ [공통 편집 URL] 어디서든 쓸 수 있게 위로 올렸습니다!
+# ✨ [공통 편집 URL]
 REAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
 
 # ✨ [데이터 로드 방어막]
@@ -82,7 +82,6 @@ def get_next_lunar_date(m, d):
         target = date(calendar.solarYear, calendar.solarMonth, calendar.solarDay)
     return target
 
-# 📋 고정 기념일 정의 (매년 반복)
 fixed_events = {
     "💰 로또 사는 날": (today + timedelta(days=(3 - today.weekday()) % 7)),
     "👦 은호 생일": get_next_date(7, 10),
@@ -92,7 +91,7 @@ fixed_events = {
     "💍 결혼기념일": get_next_date(4, 22),
 }
 
-# --- 🏠 홈 메뉴 (D-Day 통합 및 검색창) ---
+# --- 🏠 홈 메뉴 ---
 if menu == "🏠 홈":
     st.title("환영합니다! 재형님 👋")
     st.subheader("🗓️ 주요 일정 (D-Day)")
@@ -143,7 +142,7 @@ if menu == "🏠 홈":
     l2.link_button("✨ Gemini 메인", "https://gemini.google.com/", use_container_width=True)
     l3.link_button("📂 구글 드라이브", "https://drive.google.com/", use_container_width=True)
 
-# --- 🗓️ 일정 메뉴 (상세 관리) ---
+# --- 🗓️ 일정 메뉴 ---
 elif menu == "🗓️ 일정":
     st.title("상세 일정 및 메모 관리 🗓️")
     
@@ -154,7 +153,6 @@ elif menu == "🗓️ 일정":
         sel_date = st.date_input("조회할 날짜", value=today, key="sel_date_picker")
         
         st.info("💡 일정과 메모는 아래 구글 시트에서 관리하세요.")
-        
         st.link_button("📊 구글 시트 직접 편집하기", REAL_SHEET_URL, use_container_width=True, type="primary")
 
         st.divider()
@@ -220,7 +218,6 @@ elif menu == "🗓️ 일정":
                     continue
         
         if all_combined_list:
-            # ✨ [버그 픽스] 오늘 기준 지나간 날짜(D+)는 제외하도록 필터링!
             future_events = [item for item in all_combined_list if item["날짜"] >= today]
             
             if future_events:
@@ -243,8 +240,6 @@ elif menu == "👨‍👩‍👦‍👦 가족":
             st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
         else:
             st.error("🚨 엑셀 데이터 형식을 불러오는 중 오류가 발생했습니다.")
-            with st.expander("🔍 다운받은 데이터 확인", expanded=True):
-                st.dataframe(df_events.head(5))
     else:
         st.info("💡 구글 드라이브의 엑셀 파일에 일정을 입력하면 여기에 나타납니다.")
 
@@ -293,25 +288,38 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
+                    # 관측소 매핑 (인천/연안부두/영종도 등 추가)
+                    obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035", "시화": "DT_0041", "오이도": "DT_0041", "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "백사장항": "DT_0035", "안면도": "DT_0035", "장고항": "DT_0033", "홍원항": "DT_0028"}
                     obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
                     
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
-                            api_key = st.secrets["KHOA_API_KEY"]
-                            obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&ResultType=json"
+                            api_key = st.secrets["KHOA_API_KEY"].strip()
+                            
+                            # ✨ 필수 파라미터인 날짜(Date) 추가 및 원래 주소로 복귀!
+                            today_str = date.today().strftime("%Y%m%d")
+                            obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&Date={today_str}&ResultType=json"
+                            
                             res = requests.get(obs_url, timeout=5)
                             
                             if res.status_code == 200:
                                 data = res.json()
                                 if "result" in data and "data" in data["result"]:
-                                    curr_data = data["result"]["data"][0]
-                                    w1, w2, w3 = st.columns(3)
-                                    w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
-                                    w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
-                                    w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                    res_data = data["result"]["data"]
+                                    if isinstance(res_data, list) and len(res_data) > 0:
+                                        # ✨ 하루치 리스트 중 맨 마지막(-1)에 있는 실시간 데이터 추출
+                                        curr_data = res_data[-1] 
+                                        
+                                        w1, w2, w3 = st.columns(3)
+                                        w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
+                                        w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
+                                        w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                        st.caption(f"🕒 관측 시간: {curr_data.get('record_time', '알수없음')}")
+                                    else:
+                                        st.warning("⚠️ 관측소 데이터가 비어있습니다.")
                                 else:
-                                    st.warning(f"⚠️ 기상 데이터 응답 오류 (바다타임 링크를 확인하세요)")
+                                    error_msg = data.get("result", {}).get("msg", str(data))
+                                    st.warning(f"⚠️ KHOA API 거절 원인: {error_msg}")
                             else:
                                 st.error(f"🚨 API 호출 실패! 상태코드: {res.status_code}")
                         else:
@@ -332,19 +340,16 @@ elif menu == "🎣 낚시":
             
             else:
                 st.error("🚨 한글 인코딩 또는 컬럼 누락 에러!")
-                with st.expander("🔍 파이썬이 실제로 구글에서 받아온 데이터 내용 보기", expanded=True):
-                    st.dataframe(df_fishing.head(5))
 
         else:
             st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
 
     with tab2:
-        # ✨ [선사정보 탭] 구글 시트 편집 버튼 추가!
         col_t1, col_t2 = st.columns([3, 1])
         with col_t1:
             st.subheader("🚢 등록된 전체 선사 정보")
         with col_t2:
-            st.write("") # 버튼 위치를 살짝 내리기 위한 빈 공간
+            st.write("") 
             st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
             
         if not df_fishing.empty and "지역" in df_fishing.columns:
