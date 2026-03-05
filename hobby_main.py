@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 import requests
-import urllib.request
 import io
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
@@ -10,7 +9,7 @@ from korean_lunar_calendar import KoreanLunarCalendar
 # 1. 페이지 설정
 st.set_page_config(page_title="재형의 대시보드", page_icon="🏠", layout="wide")
 
-# ✨ [UI 간격 조정] 업무용 툴과 동일하게 상단 여백 싹 제거!
+# ✨ [UI 간격 조정] 상단 여백 싹 제거
 st.markdown("""
     <style>
         .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
@@ -20,24 +19,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 🔄 [구글 시트 연동 설정] ---
-FISHING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS5oMJ3Lo3azFRkQnIrJAtBGOrX2S8WUIlSCI2Qf4ylmDsAddx9aRDP6hgzqyDCfQ/pub?gid=231636559&single=true&output=csv"
-CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS5oMJ3Lo3azFRkQnIrJAtBGOrX2S8WUIlSCI2Qf4ylmDsAddx9aRDP6hgzqyDCfQ/pub?gid=505775688&single=true&output=csv"
+FISHING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1169225155&single=true&output=csv"
+CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1183615157&single=true&output=csv"
 
-# ✨ [데이터 로드 방어막] 에러 발생 시 빨간창이 뜨지 않고 조용히 빈 데이터를 넘깁니다.
 @st.cache_data(ttl=600)
 def load_data(url):
     try:
-        # 1차 시도: 배포 서버에서 잘 작동하는 기본 방식
-        return pd.read_csv(url).fillna("")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=10)
+        res.raise_for_status() 
+        return pd.read_csv(io.StringIO(res.text)).fillna("")
     except Exception:
-        try:
-            # 2차 시도: 로컬 브라우저 위장 방식
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as response:
-                return pd.read_csv(response).fillna("")
-        except Exception:
-            # 로컬 방화벽 차단 시 조용히 넘어감
-            return pd.DataFrame()
+        return pd.DataFrame()
 
 # 데이터 로딩
 df_fishing = load_data(FISHING_CSV)
@@ -76,7 +71,6 @@ def get_next_lunar_date(m, d):
         target = date(calendar.solarYear, calendar.solarMonth, calendar.solarDay)
     return target
 
-# 📋 고정 기념일 정의 (매년 반복)
 fixed_events = {
     "💰 로또 사는 날": (today + timedelta(days=(3 - today.weekday()) % 7)),
     "👦 은호 생일": get_next_date(7, 10),
@@ -86,14 +80,15 @@ fixed_events = {
     "💍 결혼기념일": get_next_date(4, 22),
 }
 
-# --- 🏠 홈 메뉴 (D-Day 통합 및 검색창) ---
+# --- 🏠 홈 메뉴 ---
 if menu == "🏠 홈":
     st.title("환영합니다! 재형님 👋")
     st.subheader("🗓️ 주요 일정 (D-Day)")
     
     combined_all = fixed_events.copy()
     
-    if not df_events.empty:
+    # ✨ 에러 방어: '일자'와 '내용' 컬럼이 진짜 있을 때만 실행!
+    if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
         for _, row in df_events.iterrows():
             try:
                 ev_date = pd.to_datetime(row['일자']).date()
@@ -103,7 +98,6 @@ if menu == "🏠 홈":
 
     sorted_top6 = sorted(combined_all.items(), key=lambda x: x[1])[:6]
     
-    # ✨ [버그 픽스] 중복으로 2줄 나오던 D-Day 부분을 1줄로 통합 완료!
     if sorted_top6:
         cols = st.columns(len(sorted_top6))
         for i, (name, target_date) in enumerate(sorted_top6):
@@ -119,14 +113,12 @@ if menu == "🏠 홈":
     st.divider()
     
     st.subheader("🔎 빠른 검색")
-    # 구글
     g1, g2, g3, g4 = st.columns([0.5, 6, 1.5, 1.5])
     with g1: st.image("https://www.google.com/favicon.ico", width=28)
     with g2: google_q = st.text_input("Google", label_visibility="collapsed", placeholder="Google 검색어 입력", key="g_in")
     with g3: st.link_button("🔍 Go", f"https://www.google.com/search?q={google_q}" if google_q else "https://www.google.com/", use_container_width=True)
     with g4: st.link_button("📧 Gmail", "https://mail.google.com/", use_container_width=True)
     
-    # 네이버
     n1, n2, n3, n4 = st.columns([0.5, 6, 1.5, 1.5])
     with n1: st.image("https://www.naver.com/favicon.ico", width=28)
     with n2: naver_q = st.text_input("Naver", label_visibility="collapsed", placeholder="Naver 검색어 입력", key="n_in")
@@ -140,7 +132,7 @@ if menu == "🏠 홈":
     l2.link_button("✨ Gemini 메인", "https://gemini.google.com/", use_container_width=True)
     l3.link_button("📂 구글 드라이브", "https://drive.google.com/", use_container_width=True)
 
-# --- 🗓️ 일정 메뉴 (상세 관리) ---
+# --- 🗓️ 일정 메뉴 ---
 elif menu == "🗓️ 일정":
     st.title("상세 일정 및 메모 관리 🗓️")
     
@@ -151,8 +143,9 @@ elif menu == "🗓️ 일정":
         sel_date = st.date_input("조회할 날짜", value=today, key="sel_date_picker")
         
         st.info("💡 일정과 메모는 아래 구글 시트에서 관리하세요.")
-        real_sheet_url = "https://docs.google.com/spreadsheets/d/1BfVl1X-YmU7p_iG6L_uY9N0B9kY_v8_9u4I/edit?usp=sharing"
-        st.link_button("📊 구글 시트 바로가기", real_sheet_url, use_container_width=True, type="primary")
+        
+        real_sheet_url = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
+        st.link_button("📊 구글 시트 직접 편집하기", real_sheet_url, use_container_width=True, type="primary")
 
         st.divider()
 
@@ -182,7 +175,8 @@ elif menu == "🗓️ 일정":
                 st.success(f"📌 **[고정] {name}**")
                 found_on_date = True
         
-        if not df_events.empty:
+        # ✨ 에러 방어막
+        if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
                     ev_date = pd.to_datetime(row['일자']).date()
@@ -205,7 +199,7 @@ elif menu == "🗓️ 일정":
         for n, d in fixed_events.items():
             all_combined_list.append({"날짜": d, "내용": n, "출처": "고정"})
         
-        if not df_events.empty:
+        if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
                     all_combined_list.append({
@@ -228,11 +222,16 @@ elif menu == "👨‍👩‍👦‍👦 가족":
     st.write("가족 구성원 정보를 확인하고 주요 일정을 공유하는 공간입니다.")
     
     if not df_events.empty:
-        st.subheader("📅 엑셀 연동 가족 일정 (Jaehyung_Home_Data)")
-        df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
-        st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
+        if "일자" in df_events.columns:
+            st.subheader("📅 엑셀 연동 가족 일정 (Jaehyung_Home_Data)")
+            df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
+            st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
+        else:
+            st.error("🚨 엑셀 형식이 아닙니다. 방화벽 차단으로 인해 엑셀 대신 회사 안내 페이지가 로드되었습니다.")
+            with st.expander("🔍 파이썬이 실제로 다운받은 데이터 원본 보기", expanded=True):
+                st.dataframe(df_events.head(5))
     else:
-        st.info("💡 구글 드라이브의 엑셀 파일에 일정을 입력하면 여기에 나타납니다. (로컬 방화벽 차단 시 미표출)")
+        st.info("💡 구글 드라이브의 엑셀 파일에 일정을 입력하면 여기에 나타납니다.")
 
     st.divider()
     st.image("https://cdn-icons-png.flaticon.com/512/3093/3093835.png", width=200)
@@ -261,62 +260,77 @@ elif menu == "🎣 낚시":
         st.subheader("📅 원클릭 출조 및 실시간 정보")
         
         if not df_fishing.empty:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
-            with col2:
-                region_list = ["선택하세요"] + sorted([str(r) for r in df_fishing["지역"].unique() if str(r).strip() != ""])
-                sel_region = st.selectbox("출조 지역 선택 📍", region_list)
-            with col3:
-                if sel_region != "선택하세요":
-                    filtered_names = df_fishing[df_fishing["지역"] == sel_region]["선사명"].unique()
-                    name_list = ["선택하세요"] + sorted([str(n) for n in filtered_names])
-                    sel_name = st.selectbox("선사 선택 🚢", name_list)
-                else:
-                    sel_name = st.selectbox("선사 선택 🚢", ["지역을 먼저 선택하세요"])
-
-            st.divider()
-
-            if sel_region != "선택하세요":
-                obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
-                obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
-                
-                try:
-                    if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
-                        api_key = st.secrets["KHOA_API_KEY"]
-                        obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&ResultType=json"
-                        res = requests.get(obs_url, timeout=5).json()
-                        
-                        if "result" in res and "data" in res["result"]:
-                            curr_data = res["result"]["data"][0]
-                            w1, w2, w3 = st.columns(3)
-                            w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
-                            w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
-                            w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+            # ✨ 에러 방어: '지역' 컬럼이 진짜 있을 때만 정상 실행!
+            if "지역" in df_fishing.columns and "선사명" in df_fishing.columns:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
+                with col2:
+                    region_list = ["선택하세요"] + sorted([str(r) for r in df_fishing["지역"].unique() if str(r).strip() != ""])
+                    sel_region = st.selectbox("출조 지역 선택 📍", region_list)
+                with col3:
+                    if sel_region != "선택하세요":
+                        filtered_names = df_fishing[df_fishing["지역"] == sel_region]["선사명"].unique()
+                        name_list = ["선택하세요"] + sorted([str(n) for n in filtered_names])
+                        sel_name = st.selectbox("선사 선택 🚢", name_list)
                     else:
-                        st.info("💡 실시간 물때를 보려면 Streamlit Cloud(배포서버)에 API 키를 설정해주세요.")
-                except Exception as e:
-                    st.info(f"💡 기상 API 통신 지연 중... ({e})")
+                        sel_name = st.selectbox("선사 선택 🚢", ["지역을 먼저 선택하세요"])
 
-                b1, b2 = st.columns(2)
-                with b1:
-                    st.link_button(f"🌊 {sel_region} 상세 물때표 (바다타임)", f"https://www.badatime.com/search.jsp?q={sel_region}", use_container_width=True)
-                with b2:
-                    if sel_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
-                        target_row = df_fishing[(df_fishing["지역"] == sel_region) & (df_fishing["선사명"] == sel_name)]
-                        if not target_row.empty:
-                            res_url = str(target_row["예약사이트"].values[0])
-                            if res_url.startswith("http"):
-                                st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
+                st.divider()
+
+                if sel_region != "선택하세요":
+                    obs_map = {"군산": "DT_0026", "비응항": "DT_0026", "보령": "DT_0031", "대천": "DT_0031", "안흥": "DT_0035"}
+                    obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0026")
+                    
+                    try:
+                        if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
+                            api_key = st.secrets["KHOA_API_KEY"]
+                            obs_url = f"https://www.khoa.go.kr/oceangrid/grid/api/tideObs/search.do?ServiceKey={api_key}&ObsCode={obs_code}&ResultType=json"
+                            res = requests.get(obs_url, timeout=5)
+                            
+                            if res.status_code == 200:
+                                data = res.json()
+                                if "result" in data and "data" in data["result"]:
+                                    curr_data = data["result"]["data"][0]
+                                    w1, w2, w3 = st.columns(3)
+                                    w1.metric("💨 실시간 풍속", f"{curr_data.get('wind_speed', '-')} m/s")
+                                    w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
+                                    w3.metric("📏 실시간 조위", f"{curr_data.get('tide_level', '-')} cm")
+                                else:
+                                    st.warning(f"⚠️ 기상 데이터 응답 오류 (바다타임 링크를 확인하세요)")
+                            else:
+                                st.error(f"🚨 API 호출 실패! 상태코드: {res.status_code}")
+                        else:
+                            st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
+                    except Exception as e:
+                        st.error(f"🚨 기상 API 통신 에러 발생: {e}")
+
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        st.link_button(f"🌊 {sel_region} 상세 물때표 (바다타임)", f"https://www.badatime.com/search.jsp?q={sel_region}", use_container_width=True)
+                    with b2:
+                        if sel_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
+                            target_row = df_fishing[(df_fishing["지역"] == sel_region) & (df_fishing["선사명"] == sel_name)]
+                            if not target_row.empty:
+                                res_url = str(target_row["예약사이트"].values[0])
+                                if res_url.startswith("http"):
+                                    st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
+            
+            else:
+                # 방화벽에 차단당해서 이상한 HTML을 가져왔을 때 보여주는 화면!
+                st.error("🚨 엑셀의 '지역' 컬럼을 찾을 수 없습니다! (회사 보안망이 엑셀 다운로드를 낚아채고 차단 경고창을 보낸 상태입니다.)")
+                with st.expander("🔍 파이썬이 실제로 구글에서 받아온 데이터 내용 보기", expanded=True):
+                    st.dataframe(df_fishing.head(5))
+
         else:
-            st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다. (로컬 방화벽 차단 시 배포 서버에서 확인해주세요)")
+            st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
 
     with tab2:
         st.subheader("🚢 등록된 전체 선사 정보")
-        if not df_fishing.empty:
+        if not df_fishing.empty and "지역" in df_fishing.columns:
             st.dataframe(df_fishing, use_container_width=True, hide_index=True)
         else:
-            st.write("로컬 환경 제한으로 데이터가 표출되지 않습니다. 엑셀을 직접 확인해주세요.")
+            st.write("로컬 방화벽 차단으로 인해 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
 
     with tab3:
         st.subheader("📸 낚시의 추억")
