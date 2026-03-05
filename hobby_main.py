@@ -23,10 +23,8 @@ st.markdown("""
 FISHING_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1169225155&single=true&output=csv"
 CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWEmDw7Q1SEQo9a9DkloWt2pgIFwoIGCTi0SmD1lQRp_GsyTIbqBm3pn9SRCVwxpi_/pub?gid=1183615157&single=true&output=csv"
 
-# ✨ [공통 편집 URL]
 REAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
 
-# ✨ [데이터 로드 방어막]
 @st.cache_data(ttl=600)
 def load_data(url):
     try:
@@ -295,31 +293,30 @@ elif menu == "🎣 낚시":
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             
-                            # ✨ [업데이트 핵심!] 공공데이터포털(data.go.kr) 전용 URL과 파라미터로 완전히 교체!
                             today_str = date.today().strftime("%Y%m%d")
                             obs_url = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&pageNo=1&numOfRows=10&type=json&obsCode={obs_code}&reqDate={today_str}"
                             
-                            res = requests.get(obs_url, timeout=10) # 공공 API는 응답이 조금 느릴 수 있어 10초로 연장
+                            res = requests.get(obs_url, timeout=10)
                             
                             if res.status_code == 200:
                                 try:
                                     data = res.json()
                                     items = []
                                     
-                                    # 공공데이터포털 표준 구조에서 데이터 뽑기
+                                    # ✨ [업그레이드] 어떤 모양의 박스로 오든 다 뜯어냅니다!
                                     if "response" in data and "body" in data.get("response", {}):
                                         body = data["response"]["body"]
-                                        if "items" in body and body["items"]:
-                                            items = body["items"].get("item", [])
-                                    # KHOA 구버전 구조로 들어올 경우를 대비한 2중 안전장치
-                                    elif "result" in data and "data" in data.get("result", {}):
-                                        items = data["result"]["data"]
-                                        
-                                    if isinstance(items, list) and len(items) > 0:
-                                        curr_data = items[-1] # 리스트의 맨 마지막(최신) 데이터
-                                        
+                                        if body.get("items"):
+                                            raw_item = body["items"].get("item", [])
+                                            if isinstance(raw_item, list):
+                                                items = raw_item
+                                            elif isinstance(raw_item, dict):
+                                                items = [raw_item]
+                                    
+                                    # 데이터가 존재할 경우 화면에 뿌리기
+                                    if items:
+                                        curr_data = items[-1]
                                         w1, w2, w3 = st.columns(3)
-                                        # wind_speed와 wind_spd 둘 다 대응
                                         wind_val = curr_data.get('wind_speed', curr_data.get('wind_spd', '-'))
                                         w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
                                         w2.metric("🌡️ 현재 수온", f"{curr_data.get('water_temp', '-')} ℃")
@@ -328,11 +325,13 @@ elif menu == "🎣 낚시":
                                         obs_time = curr_data.get('record_time', curr_data.get('obs_time', '알수없음'))
                                         st.caption(f"🕒 관측 시간: {obs_time}")
                                     else:
-                                        st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
+                                        # ✨ [엑스레이 장착] 진짜 데이터가 비어있다면 서버가 준 편지(JSON) 원본을 그대로 노출!
+                                        st.warning("⚠️ API 통신은 성공했으나, 공공데이터포털에서 받은 상자(데이터)가 비어있습니다!")
+                                        with st.expander("🔍 공공데이터포털 서버 응답 원본(JSON) 보기", expanded=True):
+                                            st.json(data)
                                         
                                 except ValueError:
-                                    # API 키 오류 등으로 JSON이 아니라 XML(태그) 에러 페이지가 날아왔을 때의 처리!
-                                    st.error("🚨 API 인증 에러! (키 값이 잘못되었거나 공공데이터포털 서버 지연)")
+                                    st.error("🚨 API 인증 에러! (공공데이터포털 서버 지연)")
                                     with st.expander("🔍 에러 메시지 원본 보기"):
                                         st.text(res.text[:500])
                             else:
