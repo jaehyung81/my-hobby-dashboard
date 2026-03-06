@@ -5,6 +5,7 @@ import requests
 import urllib.request
 import io
 import re
+from collections import defaultdict # ✨ 같은 날짜 묶어주는 마법 도구 추가
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
 import streamlit.components.v1 as components
@@ -106,7 +107,6 @@ def get_next_lunar_date(m, d):
         target = date(calendar.solarYear, calendar.solarMonth, calendar.solarDay)
     return target
 
-# ✨ [일정 복구 완료] 부모님 생신 추가!
 fixed_events = {
     "💰 로또 사는 날": (today + timedelta(days=(3 - today.weekday()) % 7)),
     "👦 은호 생일": get_next_date(7, 10),
@@ -125,8 +125,15 @@ if menu == "🏠 홈":
     st.title("환영합니다! 재형님 👋")
     st.subheader("🗓️ 주요 일정 (D-Day)")
     
-    combined_all = fixed_events.copy()
+    # ✨ [D-Day 카드 UI 적용] 모든 일정을 모아서 '날짜별'로 완벽하게 그룹핑!
+    all_future_events = []
     
+    # 1. 고정 일정 담기
+    for name, d_obj in fixed_events.items():
+        if d_obj >= today:
+            all_future_events.append({"date": d_obj, "name": name})
+            
+    # 2. 엑셀 일정 담기
     if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
         for _, row in df_events.iterrows():
             try:
@@ -134,22 +141,51 @@ if menu == "🏠 홈":
                 if ev_date >= today:
                     v_type = str(row.get('연차구분', "")).strip()
                     v_str = f"[{v_type}] " if v_type else ""
-                    combined_all[f"📂 {v_str}{row['내용']}"] = ev_date
+                    all_future_events.append({"date": ev_date, "name": f"📂 {v_str}{row['내용']}"})
             except: pass
 
-    sorted_top6 = sorted(combined_all.items(), key=lambda x: x[1])[:6]
+    # 3. 날짜별로 묶어주기 (3월 12일에 2개가 있으면 하나로 통합!)
+    grouped_events = defaultdict(list)
+    for ev in all_future_events:
+        if ev["name"] not in grouped_events[ev["date"]]:
+            grouped_events[ev["date"]].append(ev["name"])
+            
+    # 가장 가까운 5일치 날짜만 추출
+    sorted_dates = sorted(grouped_events.keys())[:5]
     
-    if sorted_top6:
-        cols = st.columns(len(sorted_top6))
-        for i, (name, target_date) in enumerate(sorted_top6):
-            d_day = (target_date - today).days
+    if sorted_dates:
+        cols = st.columns(len(sorted_dates))
+        for i, d in enumerate(sorted_dates):
+            diff = (d - today).days
+            # 날짜에 따라 포인트 컬러 변경
+            if diff == 0:
+                d_str = "Today!"
+                d_color = "#FF4B4B" # 빨강
+            elif diff == 1:
+                d_str = "D-1"
+                d_color = "#FF8C00" # 주황
+            else:
+                d_str = f"D-{diff}"
+                d_color = "#0068C9" # 파랑
+                
+            date_str = d.strftime("%m.%d")
+            
+            # 카드 안에 들어갈 세부 일정들 (여러 개면 밑으로 추가됨)
+            events_html = "".join([f"<div style='font-size:0.9rem; margin-bottom:6px; color:#333; line-height:1.3; word-break:keep-all;'>{ev}</div>" for ev in grouped_events[d]])
+            
+            # 예쁜 카드 모양 HTML
+            card_html = f"""
+            <div style="border: 1px solid #e6e6e6; border-radius: 10px; padding: 15px; background-color: #ffffff; text-align: center; height: 100%; box-shadow: 2px 2px 8px rgba(0,0,0,0.04);">
+                <h3 style="margin: 0; color: {d_color}; font-size: 1.6rem; padding-bottom: 5px;">{d_str}</h3>
+                <div style="color: #888888; font-size: 0.95rem; margin-bottom: 12px; font-weight: 500;">{date_str}</div>
+                <hr style="margin: 0 0 12px 0; border: 0; border-top: 1px dashed #ddd;">
+                <div style="text-align: left;">
+                    {events_html}
+                </div>
+            </div>
+            """
             with cols[i]:
-                if d_day == 0:
-                    st.metric(label=name, value="Today", delta="오늘!", delta_color="inverse")
-                elif d_day == 1:
-                    st.metric(label=name, value="D-1", delta="내일!")
-                else:
-                    st.metric(label=name, value=f"D-{d_day}", delta=target_date.strftime("%m.%d"))
+                st.markdown(card_html, unsafe_allow_html=True)
 
     st.divider()
     
@@ -211,7 +247,6 @@ elif menu == "🗓️ 일정":
         found_on_date = False
         for name, d_obj in fixed_events.items():
             if d_obj == sel_date:
-                # ✨ [UI 수정] [고정] 텍스트 제거
                 st.success(f"📌 **{name}**")
                 found_on_date = True
         
@@ -223,7 +258,6 @@ elif menu == "🗓️ 일정":
                         v_type = str(row.get('연차구분', "")).strip()
                         v_str = f"[{v_type}] " if v_type else ""
                         
-                        # ✨ [UI 수정] [엑셀] 텍스트 제거
                         st.success(f"📂 **{v_str}{row['내용']}**")
                         
                         memo_val = row.get('메모', "")
@@ -264,7 +298,6 @@ elif menu == "🗓️ 일정":
                     lambda x: f"D-{(x-today).days}" if x > today else "Today"
                 )
                 
-                # ✨ [UI 수정] '출처' 열 제거하여 화면을 더 깔끔하게 표시
                 st.dataframe(
                     display_df[['날짜', 'D-Day', '내용', '연차구분']], 
                     use_container_width=True, 
