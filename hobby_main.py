@@ -106,6 +106,7 @@ def get_next_lunar_date(m, d):
         target = date(calendar.solarYear, calendar.solarMonth, calendar.solarDay)
     return target
 
+# ✨ [일정 복구 완료] 부모님 생신 추가!
 fixed_events = {
     "💰 로또 사는 날": (today + timedelta(days=(3 - today.weekday()) % 7)),
     "👦 은호 생일": get_next_date(7, 10),
@@ -113,6 +114,10 @@ fixed_events = {
     "🎂 연정 생일": get_next_lunar_date(10, 24),
     "🎂 재형 생일": get_next_date(10, 18),
     "💍 결혼기념일": get_next_date(4, 22),
+    "👩 어머니 생신": get_next_date(2, 1),
+    "👨 아버지 생신": get_next_lunar_date(8, 12),
+    "👵 어머님 생신": get_next_lunar_date(1, 20),
+    "👴 아버님 생신": get_next_lunar_date(9, 4),
 }
 
 # --- 🏠 홈 메뉴 ---
@@ -127,7 +132,6 @@ if menu == "🏠 홈":
             try:
                 ev_date = pd.to_datetime(row['일자']).date()
                 if ev_date >= today:
-                    # ✨ 홈 화면에서도 연차구분이 있으면 표시하도록 수정!
                     v_type = str(row.get('연차구분', "")).strip()
                     v_str = f"[{v_type}] " if v_type else ""
                     combined_all[f"📂 {v_str}{row['내용']}"] = ev_date
@@ -207,7 +211,8 @@ elif menu == "🗓️ 일정":
         found_on_date = False
         for name, d_obj in fixed_events.items():
             if d_obj == sel_date:
-                st.success(f"📌 **[고정] {name}**")
+                # ✨ [UI 수정] [고정] 텍스트 제거
+                st.success(f"📌 **{name}**")
                 found_on_date = True
         
         if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
@@ -215,11 +220,11 @@ elif menu == "🗓️ 일정":
                 try:
                     ev_date = pd.to_datetime(row['일자']).date()
                     if ev_date == sel_date:
-                        # ✨ [연차구분 추가 적용 1] 우측 상단 박스 처리
                         v_type = str(row.get('연차구분', "")).strip()
                         v_str = f"[{v_type}] " if v_type else ""
                         
-                        st.success(f"📂 **[엑셀] {v_str}{row['내용']}**")
+                        # ✨ [UI 수정] [엑셀] 텍스트 제거
+                        st.success(f"📂 **{v_str}{row['내용']}**")
                         
                         memo_val = row.get('메모', "")
                         if memo_val and str(memo_val).strip() != "":
@@ -236,19 +241,16 @@ elif menu == "🗓️ 일정":
         
         all_combined_list = []
         for n, d in fixed_events.items():
-            all_combined_list.append({"날짜": d, "내용": n, "연차구분": "-", "출처": "고정"})
+            all_combined_list.append({"날짜": d, "내용": n, "연차구분": "-"})
         
         if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
-                    # ✨ [연차구분 추가 적용 2] 리스트 데이터에 삽입
                     v_type = str(row.get('연차구분', "")).strip()
-                    
                     all_combined_list.append({
                         "날짜": pd.to_datetime(row['일자']).date(),
                         "내용": row['내용'],
-                        "연차구분": v_type if v_type else "-",
-                        "출처": "엑셀"
+                        "연차구분": v_type if v_type else "-"
                     })
                 except:
                     continue
@@ -262,9 +264,9 @@ elif menu == "🗓️ 일정":
                     lambda x: f"D-{(x-today).days}" if x > today else "Today"
                 )
                 
-                # ✨ [연차구분 추가 적용 3] 테이블에 컬럼 표시 & 너비 조절
+                # ✨ [UI 수정] '출처' 열 제거하여 화면을 더 깔끔하게 표시
                 st.dataframe(
-                    display_df[['날짜', 'D-Day', '내용', '연차구분', '출처']], 
+                    display_df[['날짜', 'D-Day', '내용', '연차구분']], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
