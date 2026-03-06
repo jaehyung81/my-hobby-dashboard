@@ -233,7 +233,7 @@ elif menu == "👨‍👩‍👦‍👦 가족":
     
     if not df_events.empty:
         if "일자" in df_events.columns:
-            st.subheader("📅 엑셀 연동 가족 일정 (Jaehyung_Home_Data)")
+            st.subheader("📅 엑 연동 가족 일정 (Jaehyung_Home_Data)")
             df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
             st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
         else:
@@ -268,25 +268,41 @@ elif menu == "🎣 낚시":
         st.subheader("📅 원클릭 출조 및 실시간 정보")
         
         if not df_fishing.empty:
-            if "지역" in df_fishing.columns and "선사명" in df_fishing.columns:
-                col1, col2, col3 = st.columns(3)
+            # ✨ [핵심 수정] 지역1, 지역2 컬럼이 모두 있는지 확인!
+            if "지역1" in df_fishing.columns and "지역2" in df_fishing.columns and "선사명" in df_fishing.columns:
+                
+                # 가로로 4칸을 쪼갭니다 (날짜, 대분류, 중분류, 선사)
+                col1, col2, col3, col4 = st.columns([1, 1.2, 1.2, 1.5])
                 with col1:
                     t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
+                
                 with col2:
-                    region_list = ["선택하세요"] + sorted([str(r) for r in df_fishing["지역"].unique() if str(r).strip() != ""])
-                    sel_region = st.selectbox("출조 지역 선택 📍", region_list)
+                    # 1단계: 대분류(지역1) 선택
+                    region1_list = ["선택하세요"] + sorted([str(r) for r in df_fishing["지역1"].unique() if str(r).strip() != ""])
+                    sel_region1 = st.selectbox("지역 (도/시) 📍", region1_list)
+                
                 with col3:
-                    if sel_region != "선택하세요":
-                        filtered_names = df_fishing[df_fishing["지역"] == sel_region]["선사명"].unique()
+                    # 2단계: 대분류에 맞는 중분류(지역2) 필터링
+                    if sel_region1 != "선택하세요":
+                        filtered_reg2 = df_fishing[df_fishing["지역1"] == sel_region1]["지역2"].unique()
+                        region2_list = ["선택하세요"] + sorted([str(r) for r in filtered_reg2 if str(r).strip() != ""])
+                        sel_region2 = st.selectbox("상세 항구 ⚓", region2_list)
+                    else:
+                        sel_region2 = st.selectbox("상세 항구 ⚓", ["지역을 먼저 선택하세요"])
+                
+                with col4:
+                    # 3단계: 중분류에 맞는 선사명 필터링
+                    if sel_region2 not in ["선택하세요", "지역을 먼저 선택하세요"]:
+                        filtered_names = df_fishing[(df_fishing["지역1"] == sel_region1) & (df_fishing["지역2"] == sel_region2)]["선사명"].unique()
                         name_list = ["선택하세요"] + sorted([str(n) for n in filtered_names])
                         sel_name = st.selectbox("선사 선택 🚢", name_list)
                     else:
-                        sel_name = st.selectbox("선사 선택 🚢", ["지역을 먼저 선택하세요"])
+                        sel_name = st.selectbox("선사 선택 🚢", ["항구를 먼저 선택하세요"])
 
                 st.divider()
 
-                if sel_region != "선택하세요":
-                    # KHOA 공공데이터 관측소 매핑 사전
+                # API 및 바다타임 연동은 최종 선택된 항구(sel_region2)를 기준으로 작동합니다!
+                if sel_region2 not in ["선택하세요", "지역을 먼저 선택하세요"]:
                     obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -297,7 +313,7 @@ elif menu == "🎣 낚시":
                         "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
                         "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
                     }
-                    obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0018")
+                    obs_code = next((v for k, v in obs_map.items() if k in sel_region2), "DT_0018")
                     
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
@@ -357,7 +373,7 @@ elif menu == "🎣 낚시":
                                                 if t_date > today:
                                                     st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (아래 바다타임 달력을 참고하세요!)")
                                                 else:
-                                                    st.warning(f"🚨 현재 해당 지역({sel_region}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중)")
+                                                    st.warning(f"🚨 현재 해당 지역({sel_region2}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중)")
                                         else:
                                             st.warning(f"🚨 공공데이터포털 서버 일시 지연: {result_msg} (코드: {result_code})")
                                 except ValueError:
@@ -369,7 +385,7 @@ elif menu == "🎣 낚시":
                     except Exception as e:
                         st.error(f"🚨 기상 API 통신 에러 발생: {e}")
 
-                    # ✨ [핵심 솔루션] 바다타임 고유 ID 다이렉트 매핑 (멍청한 검색창 오류 100% 바이패스!)
+                    # ✨ 바다타임 연동 (sel_region2 기준)
                     st.divider()
                     
                     badatime_id_map = {
@@ -383,21 +399,20 @@ elif menu == "🎣 낚시":
                         "영종도": "159", "인천": "159", "연안부두": "158", "남항": "158", "팔미도": "153",
                     }
                     
-                    # 매핑 사전을 뒤져서 고유 번호를 낚아챕니다! (기본값: 비응항 118)
-                    b_id = next((v for k, v in badatime_id_map.items() if k in sel_region), "118")
-                    
-                    # 👉 4가지 탭(물때, 날씨, 수온, 과거)이 모두 포함된 'PC 통합 대시보드' 다이렉트 주소!
+                    b_id = next((v for k, v in badatime_id_map.items() if k in sel_region2), "118")
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
-                    
-                    # 👉 스마트폰에서 버튼 누를 때 열릴 깔끔한 모바일 전용 주소!
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
+                    
+                    # 폰 화면에 표시될 '예쁜 이름' 추출 (예: '보령 무창포항' -> '무창포항')
+                    display_region = str(sel_region2).split()[-1]
                     
                     b1, b2 = st.columns(2)
                     with b1:
-                        st.link_button(f"📱 {sel_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
+                        st.link_button(f"📱 {display_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
                     with b2:
-                        if sel_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
-                            target_row = df_fishing[(df_fishing["지역"] == sel_region) & (df_fishing["선사명"] == sel_name)]
+                        if sel_name not in ["선택하세요", "항구를 먼저 선택하세요"]:
+                            # 선사 필터링도 1, 2단계를 모두 만족하는 조건으로 찾습니다!
+                            target_row = df_fishing[(df_fishing["지역1"] == sel_region1) & (df_fishing["지역2"] == sel_region2) & (df_fishing["선사명"] == sel_name)]
                             if not target_row.empty:
                                 res_url = str(target_row["예약사이트"].values[0])
                                 if res_url.startswith("http"):
@@ -406,11 +421,10 @@ elif menu == "🎣 낚시":
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
                     st.caption("※ 아래 화면에서 **[날짜별물때, 바다날씨, 바다수온, 해양정보]** 탭을 클릭해서 확인하세요!")
                     
-                    # 4가지 화면이 시원하게 다 보이도록 액자 높이를 1000픽셀로 확 키웠습니다!
                     components.iframe(badatime_url, height=1000, scrolling=True)
             
             else:
-                st.error("🚨 한글 인코딩 또는 컬럼 누락 에러!")
+                st.error("🚨 구글 시트에 '지역1', '지역2', '선사명' 컬럼이 모두 있어야 합니다! 헤더 이름을 확인해주세요.")
 
         else:
             st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
@@ -423,7 +437,7 @@ elif menu == "🎣 낚시":
             st.write("") 
             st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
             
-        if not df_fishing.empty and "지역" in df_fishing.columns:
+        if not df_fishing.empty and "지역1" in df_fishing.columns:
             st.dataframe(df_fishing, use_container_width=True, hide_index=True)
         else:
             st.write("로컬 환경 제한으로 데이터가 표출되지 않습니다. (배포된 웹사이트에서 확인해주세요)")
