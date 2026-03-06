@@ -127,7 +127,10 @@ if menu == "🏠 홈":
             try:
                 ev_date = pd.to_datetime(row['일자']).date()
                 if ev_date >= today:
-                    combined_all[f"📂 {row['내용']}"] = ev_date
+                    # ✨ 홈 화면에서도 연차구분이 있으면 표시하도록 수정!
+                    v_type = str(row.get('연차구분', "")).strip()
+                    v_str = f"[{v_type}] " if v_type else ""
+                    combined_all[f"📂 {v_str}{row['내용']}"] = ev_date
             except: pass
 
     sorted_top6 = sorted(combined_all.items(), key=lambda x: x[1])[:6]
@@ -212,7 +215,12 @@ elif menu == "🗓️ 일정":
                 try:
                     ev_date = pd.to_datetime(row['일자']).date()
                     if ev_date == sel_date:
-                        st.success(f"📂 **[엑셀] {row['내용']}**")
+                        # ✨ [연차구분 추가 적용 1] 우측 상단 박스 처리
+                        v_type = str(row.get('연차구분', "")).strip()
+                        v_str = f"[{v_type}] " if v_type else ""
+                        
+                        st.success(f"📂 **[엑셀] {v_str}{row['내용']}**")
+                        
                         memo_val = row.get('메모', "")
                         if memo_val and str(memo_val).strip() != "":
                             st.warning(f"📝 **메모:** {memo_val}")
@@ -228,14 +236,18 @@ elif menu == "🗓️ 일정":
         
         all_combined_list = []
         for n, d in fixed_events.items():
-            all_combined_list.append({"날짜": d, "내용": n, "출처": "고정"})
+            all_combined_list.append({"날짜": d, "내용": n, "연차구분": "-", "출처": "고정"})
         
         if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
+                    # ✨ [연차구분 추가 적용 2] 리스트 데이터에 삽입
+                    v_type = str(row.get('연차구분', "")).strip()
+                    
                     all_combined_list.append({
                         "날짜": pd.to_datetime(row['일자']).date(),
                         "내용": row['내용'],
+                        "연차구분": v_type if v_type else "-",
                         "출처": "엑셀"
                     })
                 except:
@@ -249,7 +261,16 @@ elif menu == "🗓️ 일정":
                 display_df['D-Day'] = display_df['날짜'].apply(
                     lambda x: f"D-{(x-today).days}" if x > today else "Today"
                 )
-                st.dataframe(display_df[['날짜', 'D-Day', '내용', '출처']], use_container_width=True, hide_index=True)
+                
+                # ✨ [연차구분 추가 적용 3] 테이블에 컬럼 표시 & 너비 조절
+                st.dataframe(
+                    display_df[['날짜', 'D-Day', '내용', '연차구분', '출처']], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "연차구분": st.column_config.TextColumn("연차구분", width="small")
+                    }
+                )
             else:
                 st.info("예정된 일정이 없습니다.")
         
@@ -385,19 +406,15 @@ elif menu == "🎣 낚시":
 
                     st.divider()
                     
-                    # ✨ [스마트 대체 검색 마법 장착] 보령 회변항 -> 회변항 검색 -> 없으면 보령 검색!
+                    # ✨ [스마트 대체 검색]
                     region_words = str(sel_region2).split()
-                    target_port = region_words[-1] # 맨 뒤 단어 (예: 회변항, 백사장항)
-                    target_city = region_words[0]  # 맨 앞 단어 (예: 보령, 태안)
+                    target_port = region_words[-1] 
+                    target_city = region_words[0]  
                     
                     clean_port = target_port.replace("항", "").replace("포구", "").replace("방파제", "") 
-                    
-                    # 1. 먼저 상세 항구명으로 보물지도를 뒤집니다.
                     b_id = bada_id_map.get(target_port) or bada_id_map.get(clean_port)
-                    
-                    # 2. 만약 보물지도에 없는 마이너 항구라면? 앞의 '도시 이름(보령, 태안)'으로 넒게 찾습니다!
                     if not b_id:
-                        b_id = bada_id_map.get(target_city, "118") # 그래도 없으면 기본값 군산(118)
+                        b_id = bada_id_map.get(target_city, "118") 
                     
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
