@@ -285,7 +285,7 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    # ✨ [재형님 명탐정 패치] 찾아주신 신규 지역코드로 완벽 교체 완료!
+                    # 관측소 매핑 사전
                     obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -297,7 +297,6 @@ elif menu == "🎣 낚시":
                         "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
                     }
                     
-                    # 사전에 없으면 기본값 군산(DT_0018)
                     obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0018")
                     
                     try:
@@ -305,62 +304,79 @@ elif menu == "🎣 낚시":
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             req_date_str = t_date.strftime("%Y%m%d")
                             
-                            # ✨ [핵심] 공공데이터포털(apis.data.go.kr) 전용 주소 1/2단계 로직 적용
-                            # 1단계: 오늘 데이터 총 몇 개인지 물어보기
+                            # 1단계: 오늘 데이터 총 개수 확인
                             url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
                             
                             res_1 = requests.get(url_1, timeout=10)
+                            
                             if res_1.status_code == 200:
                                 try:
                                     data1 = res_1.json()
-                                    header1 = data1.get("response", {}).get("header", {})
-                                    body1 = data1.get("response", {}).get("body", {})
                                     
-                                    if header1.get("resultCode") == "00":
-                                        total_count = body1.get("totalCount", 0)
+                                    # ✨ [게이트웨이 에러 탐지기] 시스템 안내장이 날아왔을 때 원인을 정확히 분석!
+                                    if "OpenAPI_ServiceResponse" in data1:
+                                        err_msg = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnAuthMsg", "원인 불명")
+                                        err_code = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnReasonCode", "코드 없음")
+                                        st.error(f"🚨 공공데이터포털 접속 거절: {err_msg} (에러코드: {err_code})")
+                                        st.info("💡 팁: API 키 등록이 지연되고 있거나, 서버 자체 점검 중일 때 발생합니다.")
                                         
-                                        if total_count > 0:
-                                            # 2단계: 제일 마지막 거(실시간) 딱 1개만 가져오기
-                                            url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
-                                            res_2 = requests.get(url_2, timeout=10)
-                                            data2 = res_2.json()
-                                            
-                                            body2 = data2.get("response", {}).get("body", {})
-                                            raw_items = body2.get("items", {})
-                                            
-                                            items = []
-                                            if isinstance(raw_items, dict) and "item" in raw_items:
-                                                item_val = raw_items["item"]
-                                                items = item_val if isinstance(item_val, list) else [item_val]
-                                            elif isinstance(raw_items, list):
-                                                items = raw_items
-                                                
-                                            if items:
-                                                curr_data = items[-1]
-                                                w1, w2, w3 = st.columns(3)
-                                                
-                                                # 새로운 암호명 매핑 (wspd, wtem, bscTdlvHgt)
-                                                wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
-                                                w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                                w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
-                                                w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
-                                                
-                                                obs_time = curr_data.get('obsrvnDt', '알수없음')
-                                                obs_name = curr_data.get('obsvtrNm', '알수없음')
-                                                st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
-                                            else:
-                                                st.warning("⚠️ 데이터 파싱 오류: 구조가 예상과 다릅니다.")
-                                        else:
-                                            if t_date > today:
-                                                st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 참고)")
-                                            else:
-                                                st.warning("⚠️ 해당 관측소의 오늘자 데이터가 아직 생성되지 않았습니다.")
+                                        with st.expander("🔍 개발자용 에러 원본 보기 (클릭)"):
+                                            st.json(data1)
                                     else:
-                                        msg = header1.get("resultMsg", "알수없는 에러")
-                                        st.error(f"🚨 공공데이터포털 서버 지연: {msg} (코드: {header1.get('resultCode')})")
+                                        # 정상 포맷인 경우
+                                        response_node = data1.get("response", {})
+                                        header1 = response_node.get("header", data1.get("header", {}))
+                                        body1 = response_node.get("body", data1.get("body", {}))
                                         
+                                        # None 에러 방지 처리
+                                        result_code = header1.get("resultCode")
+                                        if result_code is None: result_code = "서버 Null 반환"
+                                        result_msg = header1.get("resultMsg", "상태 정보 없음")
+                                        
+                                        if result_code == "00":
+                                            total_count = body1.get("totalCount", 0)
+                                            
+                                            if total_count > 0:
+                                                # 2단계: 실시간 데이터 가져오기
+                                                url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
+                                                res_2 = requests.get(url_2, timeout=10)
+                                                data2 = res_2.json()
+                                                
+                                                body2 = data2.get("response", {}).get("body", data2.get("body", {}))
+                                                raw_items = body2.get("items", {})
+                                                
+                                                items = []
+                                                if isinstance(raw_items, dict) and "item" in raw_items:
+                                                    item_val = raw_items["item"]
+                                                    items = item_val if isinstance(item_val, list) else [item_val]
+                                                elif isinstance(raw_items, list):
+                                                    items = raw_items
+                                                    
+                                                if items:
+                                                    curr_data = items[-1]
+                                                    w1, w2, w3 = st.columns(3)
+                                                    wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
+                                                    w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
+                                                    w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
+                                                    w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
+                                                    
+                                                    obs_time = curr_data.get('obsrvnDt', '알수없음')
+                                                    obs_name = curr_data.get('obsvtrNm', '알수없음')
+                                                    st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
+                                                else:
+                                                    st.warning(f"⚠️ 공공데이터포털 서버 통신 오류 (빈 데이터를 반환했습니다.)")
+                                            else:
+                                                if t_date > today:
+                                                    st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 참고)")
+                                                else:
+                                                    st.warning(f"🚨 현재 해당 지역({sel_region}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중일 확률이 높습니다)")
+                                        else:
+                                            st.warning(f"🚨 공공데이터포털 서버 일시 지연: {result_msg} (코드: {result_code})")
+                                            with st.expander("🔍 에러 원본 보기"):
+                                                st.json(data1)
+                                            
                                 except ValueError:
-                                    st.error("🚨 API 응답 에러! (공공데이터포털 서버 통신 오류)")
+                                    st.warning("🚨 공공데이터포털 서버가 점검 중이거나 응답을 거부했습니다. (잠시 후 다시 시도해주세요)")
                             else:
                                 st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res_1.status_code}")
                         else:
