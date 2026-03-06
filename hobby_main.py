@@ -4,7 +4,7 @@ import os
 import requests
 import urllib.request
 import io
-import re  # ✨ HTML에서 번호 추출하는 도구
+import re
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
 import streamlit.components.v1 as components
@@ -45,10 +45,9 @@ def load_data(url):
         except Exception:
             return pd.DataFrame()
 
-# ✨ [바다타임 1400개 매핑 자동화] 텍스트 파일에서 ID를 읽어옵니다.
+# ✨ [바다타임 1400개 매핑 자동화] 
 @st.cache_data
 def load_bada_map():
-    # 기본 필수 항구 (bada_mapping.txt 파일이 없을 때를 대비한 안전장치)
     bada_map = {
         "비응": "118", "군산": "118", "오이도": "380", "보령": "126", "무창포": "126", "오천": "126",
         "홍원": "523", "마량": "523", "태안": "128", "안흥": "128", "신진도": "128", "백사장": "175",
@@ -58,12 +57,10 @@ def load_bada_map():
         if os.path.exists("bada_mapping.txt"):
             with open("bada_mapping.txt", "r", encoding="utf-8") as f:
                 html_text = f.read()
-                # 정규식으로 'badatime.com/번호/' 뒤에 있는 '항구이름' 추출
                 matches = re.findall(r'badatime\.com/(\d+)/[^>]*>([^<]+)</a>', html_text)
                 for b_id, name in matches:
                     clean_name = name.strip()
                     bada_map[clean_name] = b_id
-                    # '백사장항'이면 '백사장'도 추가 (검색 유연성 확보)
                     if clean_name.endswith("항"):
                         bada_map[clean_name[:-1]] = b_id
                     if clean_name.endswith("포구"):
@@ -74,7 +71,7 @@ def load_bada_map():
 
 df_fishing = load_data(FISHING_CSV)
 df_events = load_data(CALENDAR_CSV)
-bada_id_map = load_bada_map() # 보물지도 탑재 완료!
+bada_id_map = load_bada_map() 
 
 # 2. 사이드바 및 가족 트리
 st.sidebar.title("재형의 개인비서 🤖")
@@ -326,7 +323,7 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region2 != "전체":
-                    # KHOA 공공데이터 관측소 매핑 (국가 표준 DT_ 코드 전용)
+                    # KHOA 공공데이터 관측소 매핑
                     khoa_obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -388,19 +385,26 @@ elif menu == "🎣 낚시":
 
                     st.divider()
                     
-                    # ✨ [보물지도 작동] 1,400개 사전을 뒤져서 정확한 바다타임 고유 ID를 찾아냅니다!
-                    display_region = str(sel_region2).split()[-1] 
-                    clean_keyword = display_region.replace("항", "").replace("포구", "").replace("방파제", "") 
+                    # ✨ [스마트 대체 검색 마법 장착] 보령 회변항 -> 회변항 검색 -> 없으면 보령 검색!
+                    region_words = str(sel_region2).split()
+                    target_port = region_words[-1] # 맨 뒤 단어 (예: 회변항, 백사장항)
+                    target_city = region_words[0]  # 맨 앞 단어 (예: 보령, 태안)
                     
-                    # 우선 정확한 이름으로 사전을 뒤져보고, 없으면 '항' 뗀 이름으로 뒤지고, 그래도 없으면 기본값 '118(군산)'
-                    b_id = bada_id_map.get(display_region, bada_id_map.get(clean_keyword, "118"))
+                    clean_port = target_port.replace("항", "").replace("포구", "").replace("방파제", "") 
+                    
+                    # 1. 먼저 상세 항구명으로 보물지도를 뒤집니다.
+                    b_id = bada_id_map.get(target_port) or bada_id_map.get(clean_port)
+                    
+                    # 2. 만약 보물지도에 없는 마이너 항구라면? 앞의 '도시 이름(보령, 태안)'으로 넒게 찾습니다!
+                    if not b_id:
+                        b_id = bada_id_map.get(target_city, "118") # 그래도 없으면 기본값 군산(118)
                     
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
                     
                     b1, b2 = st.columns(2)
                     with b1:
-                        st.link_button(f"📱 {display_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
+                        st.link_button(f"📱 {target_port} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
                     with b2:
                         if sel_name != "전체":
                             target_row = df_step2[df_step2["선사명"] == sel_name]
@@ -410,7 +414,7 @@ elif menu == "🎣 낚시":
                                     st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
 
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
-                    st.caption(f"※ 완벽 매핑된 **[{display_region}]** 데이터입니다! 아래 화면에서 탭을 클릭해서 확인하세요!")
+                    st.caption(f"※ 완벽 매핑된 **[{target_port}]** (또는 인근 지역) 데이터입니다! 아래 화면에서 탭을 클릭해서 확인하세요!")
                     components.iframe(badatime_url, height=1000, scrolling=True)
                 else:
                     st.info("💡 실시간 바다 날씨와 물때표를 보시려면 위에서 **상세 항구 ⚓**를 선택해주세요!")
