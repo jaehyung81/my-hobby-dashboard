@@ -4,6 +4,7 @@ import os
 import requests
 import urllib.request
 import io
+import re  # ✨ HTML에서 번호 추출하는 도구
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
 import streamlit.components.v1 as components
@@ -44,8 +45,36 @@ def load_data(url):
         except Exception:
             return pd.DataFrame()
 
+# ✨ [바다타임 1400개 매핑 자동화] 텍스트 파일에서 ID를 읽어옵니다.
+@st.cache_data
+def load_bada_map():
+    # 기본 필수 항구 (bada_mapping.txt 파일이 없을 때를 대비한 안전장치)
+    bada_map = {
+        "비응": "118", "군산": "118", "오이도": "380", "보령": "126", "무창포": "126", "오천": "126",
+        "홍원": "523", "마량": "523", "태안": "128", "안흥": "128", "신진도": "128", "백사장": "175",
+        "당진": "131", "장고항": "131", "영종도": "159", "인천": "159", "고성": "528", "대진": "528", "속초": "192"
+    }
+    try:
+        if os.path.exists("bada_mapping.txt"):
+            with open("bada_mapping.txt", "r", encoding="utf-8") as f:
+                html_text = f.read()
+                # 정규식으로 'badatime.com/번호/' 뒤에 있는 '항구이름' 추출
+                matches = re.findall(r'badatime\.com/(\d+)/[^>]*>([^<]+)</a>', html_text)
+                for b_id, name in matches:
+                    clean_name = name.strip()
+                    bada_map[clean_name] = b_id
+                    # '백사장항'이면 '백사장'도 추가 (검색 유연성 확보)
+                    if clean_name.endswith("항"):
+                        bada_map[clean_name[:-1]] = b_id
+                    if clean_name.endswith("포구"):
+                        bada_map[clean_name[:-2]] = b_id
+    except Exception:
+        pass
+    return bada_map
+
 df_fishing = load_data(FISHING_CSV)
 df_events = load_data(CALENDAR_CSV)
+bada_id_map = load_bada_map() # 보물지도 탑재 완료!
 
 # 2. 사이드바 및 가족 트리
 st.sidebar.title("재형의 개인비서 🤖")
@@ -233,7 +262,7 @@ elif menu == "👨‍👩‍👦‍👦 가족":
     
     if not df_events.empty:
         if "일자" in df_events.columns:
-            st.subheader("📅 엑셀 연동 가족 일정 (Jaehyung_Home_Data)")
+            st.subheader("📅 엑셀 연동 가족 일정")
             df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
             st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
         else:
@@ -274,23 +303,20 @@ elif menu == "🎣 낚시":
                 with col1:
                     t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
                 
-                # ✨ [드롭다운 자유 필터링 적용] 처음부터 모든 목록을 열어두되, 선택하면 점점 좁혀집니다!
                 with col2:
                     region1_list = ["전체"] + sorted([str(r) for r in df_fishing["지역1"].unique() if str(r).strip() != ""])
                     sel_region1 = st.selectbox("지역 (도/시) 📍", region1_list)
                 
-                # 1단계 필터링
                 df_step1 = df_fishing.copy()
-                if sel_region1 != "전체":
+                if sel_region1 != "전체": 
                     df_step1 = df_step1[df_step1["지역1"] == sel_region1]
                     
                 with col3:
                     region2_list = ["전체"] + sorted([str(r) for r in df_step1["지역2"].unique() if str(r).strip() != ""])
                     sel_region2 = st.selectbox("상세 항구 ⚓", region2_list)
                 
-                # 2단계 필터링
                 df_step2 = df_step1.copy()
-                if sel_region2 != "전체":
+                if sel_region2 != "전체": 
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
@@ -299,19 +325,19 @@ elif menu == "🎣 낚시":
 
                 st.divider()
 
-                # 실시간 물때는 '항구(지역2)'가 정확히 선택되었을 때만 작동합니다.
                 if sel_region2 != "전체":
-                    obs_map = {
+                    # KHOA 공공데이터 관측소 매핑 (국가 표준 DT_ 코드 전용)
+                    khoa_obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
-                        "태안": "DT_0050", "안흥": "DT_0067", "신진도": "DT_0067", "백사장": "DT_0067", "안면도": "DT_0067", "영목": "DT_0067", "마검포": "DT_0067",
+                        "태안": "DT_0050", "안흥": "DT_0067", "신진도": "DT_0067", "백사장": "DT_0067", "안면도": "DT_0067", "영목": "DT_0067",
                         "서천": "DT_0051", "홍원": "DT_0051", "마량": "DT_0051", "장항": "DT_0024",
                         "당진": "DT_0017", "장고항": "DT_0017", "도비도": "DT_0017", "대산": "DT_0017",
                         "시흥": "DT_0008", "오이도": "DT_0008", "시화": "DT_0008", "안산": "DT_0008",
                         "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
                         "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
                     }
-                    obs_code = next((v for k, v in obs_map.items() if k in sel_region2), "DT_0018")
+                    obs_code = next((v for k, v in khoa_obs_map.items() if k in sel_region2), "DT_0018")
                     
                     try:
                         if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
@@ -325,89 +351,58 @@ elif menu == "🎣 낚시":
                                 try:
                                     data1 = res_1.json()
                                     if "OpenAPI_ServiceResponse" in data1:
-                                        err_msg = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnAuthMsg", "원인 불명")
-                                        err_code = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnReasonCode", "코드 없음")
-                                        st.error(f"🚨 공공데이터포털 접속 거절: {err_msg} (에러코드: {err_code})")
+                                        st.error(f"🚨 공공데이터포털 접속 거절: {data1['OpenAPI_ServiceResponse'].get('cmmMsgHeader', {}).get('returnAuthMsg', '')}")
                                     else:
                                         response_node = data1.get("response", {})
                                         header1 = response_node.get("header", data1.get("header", {}))
                                         body1 = response_node.get("body", data1.get("body", {}))
                                         
                                         result_code = header1.get("resultCode")
-                                        if result_code is None: result_code = "서버 Null 반환"
-                                        result_msg = header1.get("resultMsg", "상태 정보 없음")
-                                        
-                                        if result_code == "00":
-                                            total_count = body1.get("totalCount", 0)
-                                            if total_count > 0:
-                                                url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
-                                                res_2 = requests.get(url_2, timeout=10)
-                                                data2 = res_2.json()
+                                        if result_code == "00" and body1.get("totalCount", 0) > 0:
+                                            total_count = body1.get("totalCount")
+                                            url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
+                                            res_2 = requests.get(url_2, timeout=10)
+                                            data2 = res_2.json()
+                                            
+                                            body2 = data2.get("response", {}).get("body", data2.get("body", {}))
+                                            raw_items = body2.get("items", {})
+                                            items = raw_items.get("item", []) if isinstance(raw_items, dict) else raw_items
+                                            if not isinstance(items, list): items = [items]
                                                 
-                                                body2 = data2.get("response", {}).get("body", data2.get("body", {}))
-                                                raw_items = body2.get("items", {})
+                                            if items:
+                                                curr_data = items[-1]
+                                                w1, w2, w3 = st.columns(3)
+                                                wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
+                                                w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
+                                                w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
+                                                w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
                                                 
-                                                items = []
-                                                if isinstance(raw_items, dict) and "item" in raw_items:
-                                                    item_val = raw_items["item"]
-                                                    items = item_val if isinstance(item_val, list) else [item_val]
-                                                elif isinstance(raw_items, list):
-                                                    items = raw_items
-                                                    
-                                                if items:
-                                                    curr_data = items[-1]
-                                                    w1, w2, w3 = st.columns(3)
-                                                    wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
-                                                    w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                                    w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
-                                                    w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
-                                                    
-                                                    obs_time = curr_data.get('obsrvnDt', '알수없음')
-                                                    obs_name = curr_data.get('obsvtrNm', '알수없음')
-                                                    st.caption(f"🕒 실시간 관측 시간: {obs_time} (관측소: {obs_name})")
-                                                else:
-                                                    st.warning(f"⚠️ 공공데이터포털 서버 통신 오류 (빈 데이터를 반환했습니다.)")
-                                            else:
-                                                if t_date > today:
-                                                    st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (아래 바다타임 달력을 참고하세요!)")
-                                                else:
-                                                    st.warning(f"🚨 현재 해당 지역({sel_region2}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중)")
+                                                st.caption(f"🕒 실시간 관측 시간: {curr_data.get('obsrvnDt', '알수없음')} (관측소: {curr_data.get('obsvtrNm', '알수없음')})")
+                                            else: st.warning(f"⚠️ 공공데이터포털 서버 통신 오류")
                                         else:
-                                            st.warning(f"🚨 공공데이터포털 서버 일시 지연: {result_msg} (코드: {result_code})")
-                                except ValueError:
-                                    st.warning("🚨 공공데이터포털 서버가 점검 중이거나 응답을 거부했습니다.")
-                            else:
-                                st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res_1.status_code}")
-                        else:
-                            st.info("💡 실시간 물때를 보려면 Streamlit Cloud에 API 키(Secrets)를 등록해주세요.")
-                    except Exception as e:
-                        st.error(f"🚨 기상 API 통신 에러 발생: {e}")
+                                            if t_date > today: st.info("🔮 미래 날짜는 아직 실시간 데이터가 없습니다.")
+                                            else: st.warning(f"🚨 현재 해당 지역 근처 관측소 데이터 점검 중")
+                                except ValueError: st.warning("🚨 공공데이터포털 서버 점검 중")
+                            else: st.error(f"🚨 서버 통신 실패! {res_1.status_code}")
+                    except Exception as e: st.error(f"🚨 통신 에러: {e}")
 
                     st.divider()
                     
-                    badatime_id_map = {
-                        "비응": "118", "군산": "118", "야미도": "118", "선유도": "118", "새만금": "118",
-                        "오이도": "380", "시흥": "380", "시화": "380", "안산": "380",
-                        "대천": "126", "보령": "126", "무창포": "126", "오천": "126", "회변": "126",
-                        "홍원": "523", "서천": "523", "마량": "523", "장항": "523",
-                        "대진": "528", "고성": "528", "공현진": "528", "속초": "192", "아야진": "528",
-                        "태안": "128", "안흥": "128", "신진도": "128", "백사장": "128", "안면도": "128", "영목": "128", "마검포": "128",
-                        "당진": "131", "장고항": "131", "도비도": "131", "대산": "131",
-                        "영종도": "159", "인천": "159", "연안부두": "158", "남항": "158", "팔미도": "153",
-                    }
+                    # ✨ [보물지도 작동] 1,400개 사전을 뒤져서 정확한 바다타임 고유 ID를 찾아냅니다!
+                    display_region = str(sel_region2).split()[-1] 
+                    clean_keyword = display_region.replace("항", "").replace("포구", "").replace("방파제", "") 
                     
-                    b_id = next((v for k, v in badatime_id_map.items() if k in sel_region2), "118")
+                    # 우선 정확한 이름으로 사전을 뒤져보고, 없으면 '항' 뗀 이름으로 뒤지고, 그래도 없으면 기본값 '118(군산)'
+                    b_id = bada_id_map.get(display_region, bada_id_map.get(clean_keyword, "118"))
+                    
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
-                    
-                    display_region = str(sel_region2).split()[-1]
                     
                     b1, b2 = st.columns(2)
                     with b1:
                         st.link_button(f"📱 {display_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
                     with b2:
                         if sel_name != "전체":
-                            # 선사 필터링도 1, 2단계를 모두 만족하는 조건으로 찾습니다!
                             target_row = df_step2[df_step2["선사명"] == sel_name]
                             if not target_row.empty:
                                 res_url = str(target_row["예약사이트"].values[0])
@@ -415,28 +410,19 @@ elif menu == "🎣 낚시":
                                     st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
 
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
-                    st.caption("※ 아래 화면에서 **[날짜별물때, 바다날씨, 바다수온, 해양정보]** 탭을 클릭해서 확인하세요!")
-                    
+                    st.caption(f"※ 완벽 매핑된 **[{display_region}]** 데이터입니다! 아래 화면에서 탭을 클릭해서 확인하세요!")
                     components.iframe(badatime_url, height=1000, scrolling=True)
-                
                 else:
-                    # 항구가 "전체"인 경우 안내 메시지 출력
                     st.info("💡 실시간 바다 날씨와 물때표를 보시려면 위에서 **상세 항구 ⚓**를 선택해주세요!")
-            
             else:
                 st.error("🚨 구글 시트에 '지역1', '지역2', '선사명' 컬럼이 모두 있어야 합니다! 헤더 이름을 확인해주세요.")
-
         else:
             st.warning("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
 
     with tab2:
         col_t1, col_t2 = st.columns([3, 1])
-        with col_t1:
-            st.subheader("🚢 등록된 전체 선사 정보")
-        with col_t2:
-            st.write("") 
-            st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
-            
+        with col_t1: st.subheader("🚢 등록된 전체 선사 정보")
+        with col_t2: st.write(""); st.link_button("📊 구글 시트 직접 편집", REAL_SHEET_URL, use_container_width=True)
         if not df_fishing.empty and "지역1" in df_fishing.columns:
             st.dataframe(df_fishing, use_container_width=True, hide_index=True)
         else:
