@@ -233,7 +233,7 @@ elif menu == "👨‍👩‍👦‍👦 가족":
     
     if not df_events.empty:
         if "일자" in df_events.columns:
-            st.subheader("📅 엑 연동 가족 일정 (Jaehyung_Home_Data)")
+            st.subheader("📅 엑셀 연동 가족 일정 (Jaehyung_Home_Data)")
             df_events['일자'] = pd.to_datetime(df_events['일자']).dt.date
             st.dataframe(df_events.sort_values('일자'), use_container_width=True, hide_index=True)
         else:
@@ -268,41 +268,39 @@ elif menu == "🎣 낚시":
         st.subheader("📅 원클릭 출조 및 실시간 정보")
         
         if not df_fishing.empty:
-            # ✨ [핵심 수정] 지역1, 지역2 컬럼이 모두 있는지 확인!
             if "지역1" in df_fishing.columns and "지역2" in df_fishing.columns and "선사명" in df_fishing.columns:
                 
-                # 가로로 4칸을 쪼갭니다 (날짜, 대분류, 중분류, 선사)
                 col1, col2, col3, col4 = st.columns([1, 1.2, 1.2, 1.5])
                 with col1:
                     t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
                 
+                # ✨ [드롭다운 자유 필터링 적용] 처음부터 모든 목록을 열어두되, 선택하면 점점 좁혀집니다!
                 with col2:
-                    # 1단계: 대분류(지역1) 선택
-                    region1_list = ["선택하세요"] + sorted([str(r) for r in df_fishing["지역1"].unique() if str(r).strip() != ""])
+                    region1_list = ["전체"] + sorted([str(r) for r in df_fishing["지역1"].unique() if str(r).strip() != ""])
                     sel_region1 = st.selectbox("지역 (도/시) 📍", region1_list)
                 
+                # 1단계 필터링
+                df_step1 = df_fishing.copy()
+                if sel_region1 != "전체":
+                    df_step1 = df_step1[df_step1["지역1"] == sel_region1]
+                    
                 with col3:
-                    # 2단계: 대분류에 맞는 중분류(지역2) 필터링
-                    if sel_region1 != "선택하세요":
-                        filtered_reg2 = df_fishing[df_fishing["지역1"] == sel_region1]["지역2"].unique()
-                        region2_list = ["선택하세요"] + sorted([str(r) for r in filtered_reg2 if str(r).strip() != ""])
-                        sel_region2 = st.selectbox("상세 항구 ⚓", region2_list)
-                    else:
-                        sel_region2 = st.selectbox("상세 항구 ⚓", ["지역을 먼저 선택하세요"])
+                    region2_list = ["전체"] + sorted([str(r) for r in df_step1["지역2"].unique() if str(r).strip() != ""])
+                    sel_region2 = st.selectbox("상세 항구 ⚓", region2_list)
                 
+                # 2단계 필터링
+                df_step2 = df_step1.copy()
+                if sel_region2 != "전체":
+                    df_step2 = df_step2[df_step2["지역2"] == sel_region2]
+                    
                 with col4:
-                    # 3단계: 중분류에 맞는 선사명 필터링
-                    if sel_region2 not in ["선택하세요", "지역을 먼저 선택하세요"]:
-                        filtered_names = df_fishing[(df_fishing["지역1"] == sel_region1) & (df_fishing["지역2"] == sel_region2)]["선사명"].unique()
-                        name_list = ["선택하세요"] + sorted([str(n) for n in filtered_names])
-                        sel_name = st.selectbox("선사 선택 🚢", name_list)
-                    else:
-                        sel_name = st.selectbox("선사 선택 🚢", ["항구를 먼저 선택하세요"])
+                    name_list = ["전체"] + sorted([str(n) for n in df_step2["선사명"].unique() if str(n).strip() != ""])
+                    sel_name = st.selectbox("선사 선택 🚢", name_list)
 
                 st.divider()
 
-                # API 및 바다타임 연동은 최종 선택된 항구(sel_region2)를 기준으로 작동합니다!
-                if sel_region2 not in ["선택하세요", "지역을 먼저 선택하세요"]:
+                # 실시간 물때는 '항구(지역2)'가 정확히 선택되었을 때만 작동합니다.
+                if sel_region2 != "전체":
                     obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -385,7 +383,6 @@ elif menu == "🎣 낚시":
                     except Exception as e:
                         st.error(f"🚨 기상 API 통신 에러 발생: {e}")
 
-                    # ✨ 바다타임 연동 (sel_region2 기준)
                     st.divider()
                     
                     badatime_id_map = {
@@ -403,16 +400,15 @@ elif menu == "🎣 낚시":
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
                     
-                    # 폰 화면에 표시될 '예쁜 이름' 추출 (예: '보령 무창포항' -> '무창포항')
                     display_region = str(sel_region2).split()[-1]
                     
                     b1, b2 = st.columns(2)
                     with b1:
                         st.link_button(f"📱 {display_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
                     with b2:
-                        if sel_name not in ["선택하세요", "항구를 먼저 선택하세요"]:
+                        if sel_name != "전체":
                             # 선사 필터링도 1, 2단계를 모두 만족하는 조건으로 찾습니다!
-                            target_row = df_fishing[(df_fishing["지역1"] == sel_region1) & (df_fishing["지역2"] == sel_region2) & (df_fishing["선사명"] == sel_name)]
+                            target_row = df_step2[df_step2["선사명"] == sel_name]
                             if not target_row.empty:
                                 res_url = str(target_row["예약사이트"].values[0])
                                 if res_url.startswith("http"):
@@ -422,6 +418,10 @@ elif menu == "🎣 낚시":
                     st.caption("※ 아래 화면에서 **[날짜별물때, 바다날씨, 바다수온, 해양정보]** 탭을 클릭해서 확인하세요!")
                     
                     components.iframe(badatime_url, height=1000, scrolling=True)
+                
+                else:
+                    # 항구가 "전체"인 경우 안내 메시지 출력
+                    st.info("💡 실시간 바다 날씨와 물때표를 보시려면 위에서 **상세 항구 ⚓**를 선택해주세요!")
             
             else:
                 st.error("🚨 구글 시트에 '지역1', '지역2', '선사명' 컬럼이 모두 있어야 합니다! 헤더 이름을 확인해주세요.")
