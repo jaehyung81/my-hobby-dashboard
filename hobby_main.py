@@ -6,6 +6,7 @@ import urllib.request
 import io
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
+import streamlit.components.v1 as components
 
 # 1. 페이지 설정
 st.set_page_config(page_title="재형의 대시보드", page_icon="🏠", layout="wide")
@@ -285,7 +286,7 @@ elif menu == "🎣 낚시":
                 st.divider()
 
                 if sel_region != "선택하세요":
-                    # 관측소 매핑 사전
+                    # KHOA 공공데이터 관측소 매핑 사전
                     obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -296,7 +297,6 @@ elif menu == "🎣 낚시":
                         "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
                         "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
                     }
-                    
                     obs_code = next((v for k, v in obs_map.items() if k in sel_region), "DT_0018")
                     
                     try:
@@ -304,40 +304,28 @@ elif menu == "🎣 낚시":
                             api_key = st.secrets["KHOA_API_KEY"].strip()
                             req_date_str = t_date.strftime("%Y%m%d")
                             
-                            # 1단계: 오늘 데이터 총 개수 확인
                             url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
-                            
                             res_1 = requests.get(url_1, timeout=10)
                             
                             if res_1.status_code == 200:
                                 try:
                                     data1 = res_1.json()
-                                    
-                                    # ✨ [게이트웨이 에러 탐지기] 시스템 안내장이 날아왔을 때 원인을 정확히 분석!
                                     if "OpenAPI_ServiceResponse" in data1:
                                         err_msg = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnAuthMsg", "원인 불명")
                                         err_code = data1["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {}).get("returnReasonCode", "코드 없음")
                                         st.error(f"🚨 공공데이터포털 접속 거절: {err_msg} (에러코드: {err_code})")
-                                        st.info("💡 팁: API 키 등록이 지연되고 있거나, 서버 자체 점검 중일 때 발생합니다.")
-                                        
-                                        with st.expander("🔍 개발자용 에러 원본 보기 (클릭)"):
-                                            st.json(data1)
                                     else:
-                                        # 정상 포맷인 경우
                                         response_node = data1.get("response", {})
                                         header1 = response_node.get("header", data1.get("header", {}))
                                         body1 = response_node.get("body", data1.get("body", {}))
                                         
-                                        # None 에러 방지 처리
                                         result_code = header1.get("resultCode")
                                         if result_code is None: result_code = "서버 Null 반환"
                                         result_msg = header1.get("resultMsg", "상태 정보 없음")
                                         
                                         if result_code == "00":
                                             total_count = body1.get("totalCount", 0)
-                                            
                                             if total_count > 0:
-                                                # 2단계: 실시간 데이터 가져오기
                                                 url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
                                                 res_2 = requests.get(url_2, timeout=10)
                                                 data2 = res_2.json()
@@ -367,16 +355,13 @@ elif menu == "🎣 낚시":
                                                     st.warning(f"⚠️ 공공데이터포털 서버 통신 오류 (빈 데이터를 반환했습니다.)")
                                             else:
                                                 if t_date > today:
-                                                    st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (바다타임 참고)")
+                                                    st.info("🔮 미래 날짜는 아직 관측된 실시간 데이터가 없습니다. (아래 바다타임 달력을 참고하세요!)")
                                                 else:
-                                                    st.warning(f"🚨 현재 해당 지역({sel_region}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중일 확률이 높습니다)")
+                                                    st.warning(f"🚨 현재 해당 지역({sel_region}) 근처 관측소의 실시간 데이터가 공공서버에 없습니다. (관측 장비 점검 중)")
                                         else:
                                             st.warning(f"🚨 공공데이터포털 서버 일시 지연: {result_msg} (코드: {result_code})")
-                                            with st.expander("🔍 에러 원본 보기"):
-                                                st.json(data1)
-                                            
                                 except ValueError:
-                                    st.warning("🚨 공공데이터포털 서버가 점검 중이거나 응답을 거부했습니다. (잠시 후 다시 시도해주세요)")
+                                    st.warning("🚨 공공데이터포털 서버가 점검 중이거나 응답을 거부했습니다.")
                             else:
                                 st.error(f"🚨 공공데이터포털 서버 통신 실패! 상태코드: {res_1.status_code}")
                         else:
@@ -384,9 +369,32 @@ elif menu == "🎣 낚시":
                     except Exception as e:
                         st.error(f"🚨 기상 API 통신 에러 발생: {e}")
 
+                    # ✨ [핵심 솔루션] 바다타임 고유 ID 다이렉트 매핑 (멍청한 검색창 오류 100% 바이패스!)
+                    st.divider()
+                    
+                    badatime_id_map = {
+                        "비응": "118", "군산": "118", "야미도": "118", "선유도": "118", "새만금": "118",
+                        "오이도": "380", "시흥": "380", "시화": "380", "안산": "380",
+                        "대천": "126", "보령": "126", "무창포": "126", "오천": "126", "회변": "126",
+                        "홍원": "523", "서천": "523", "마량": "523", "장항": "523",
+                        "대진": "528", "고성": "528", "공현진": "528", "속초": "192", "아야진": "528",
+                        "태안": "128", "안흥": "128", "신진도": "128", "백사장": "128", "안면도": "128", "영목": "128", "마검포": "128",
+                        "당진": "131", "장고항": "131", "도비도": "131", "대산": "131",
+                        "영종도": "159", "인천": "159", "연안부두": "158", "남항": "158", "팔미도": "153",
+                    }
+                    
+                    # 매핑 사전을 뒤져서 고유 번호를 낚아챕니다! (기본값: 비응항 118)
+                    b_id = next((v for k, v in badatime_id_map.items() if k in sel_region), "118")
+                    
+                    # 👉 4가지 탭(물때, 날씨, 수온, 과거)이 모두 포함된 'PC 통합 대시보드' 다이렉트 주소!
+                    badatime_url = f"https://www.badatime.com/{b_id}/tide"
+                    
+                    # 👉 스마트폰에서 버튼 누를 때 열릴 깔끔한 모바일 전용 주소!
+                    badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
+                    
                     b1, b2 = st.columns(2)
                     with b1:
-                        st.link_button(f"🌊 {sel_region} 상세 물때표 (바다타임)", f"https://www.badatime.com/search.jsp?q={sel_region}", use_container_width=True)
+                        st.link_button(f"📱 {sel_region} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
                     with b2:
                         if sel_name not in ["선택하세요", "지역을 먼저 선택하세요"]:
                             target_row = df_fishing[(df_fishing["지역"] == sel_region) & (df_fishing["선사명"] == sel_name)]
@@ -394,6 +402,12 @@ elif menu == "🎣 낚시":
                                 res_url = str(target_row["예약사이트"].values[0])
                                 if res_url.startswith("http"):
                                     st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
+
+                    st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
+                    st.caption("※ 아래 화면에서 **[날짜별물때, 바다날씨, 바다수온, 해양정보]** 탭을 클릭해서 확인하세요!")
+                    
+                    # 4가지 화면이 시원하게 다 보이도록 액자 높이를 1000픽셀로 확 키웠습니다!
+                    components.iframe(badatime_url, height=1000, scrolling=True)
             
             else:
                 st.error("🚨 한글 인코딩 또는 컬럼 누락 에러!")
