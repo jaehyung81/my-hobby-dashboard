@@ -28,7 +28,7 @@ CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWE
 
 REAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def load_data(url):
     try:
         headers = {
