@@ -28,7 +28,7 @@ CALENDAR_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0bfr1sGxo99WWE
 
 REAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/1g9nOdErm8O8isOykEXyjDwlQqKaBtjk_3vGnsXEhaE0/edit"
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def load_data(url):
     try:
         headers = {
@@ -352,13 +352,27 @@ elif menu == "🎣 낚시":
         if not df_fishing.empty:
             if "지역1" in df_fishing.columns and "지역2" in df_fishing.columns and "선사명" in df_fishing.columns:
                 
+                # ✨ [역방향 선택 마법!] 선사를 고르면 항구를 찾아냅니다.
+                if "sel_reg1" not in st.session_state: st.session_state.sel_reg1 = "전체"
+                if "sel_reg2" not in st.session_state: st.session_state.sel_reg2 = "전체"
+                if "sel_ship" not in st.session_state: st.session_state.sel_ship = "전체"
+
+                def auto_fill_port():
+                    ship = st.session_state.sel_ship
+                    if ship != "전체":
+                        # 선택한 배의 항구를 구글 시트에서 찾아서 강제로 채워줍니다!
+                        port = df_fishing[df_fishing["선사명"] == ship]["지역2"].values
+                        if len(port) > 0:
+                            st.session_state.sel_reg2 = str(port[0])
+
                 col1, col2, col3, col4 = st.columns([1, 1.2, 1.2, 1.5])
                 with col1:
                     t_date = st.date_input("출조 예정일", value=today, format="YYYY/MM/DD")
                 
                 with col2:
                     region1_list = ["전체"] + sorted([str(r) for r in df_fishing["지역1"].unique() if str(r).strip() != ""])
-                    sel_region1 = st.selectbox("지역 (도/시) 📍", region1_list)
+                    if st.session_state.sel_reg1 not in region1_list: st.session_state.sel_reg1 = "전체"
+                    sel_region1 = st.selectbox("지역 (도/시) 📍", region1_list, key="sel_reg1")
                 
                 df_step1 = df_fishing.copy()
                 if sel_region1 != "전체": 
@@ -366,29 +380,29 @@ elif menu == "🎣 낚시":
                     
                 with col3:
                     region2_list = ["전체"] + sorted([str(r) for r in df_step1["지역2"].unique() if str(r).strip() != ""])
-                    sel_region2 = st.selectbox("상세 항구 ⚓", region2_list)
+                    if st.session_state.sel_reg2 not in region2_list: st.session_state.sel_reg2 = "전체"
+                    sel_region2 = st.selectbox("상세 항구 ⚓", region2_list, key="sel_reg2")
                 
                 df_step2 = df_step1.copy()
                 if sel_region2 != "전체": 
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
+                    # 💡 on_change 속성을 걸어서, 선사를 고르는 순간 auto_fill_port 함수가 작동합니다!
                     name_list = ["전체"] + sorted([str(n) for n in df_step2["선사명"].unique() if str(n).strip() != ""])
-                    sel_name = st.selectbox("선사 선택 🚢", name_list)
+                    if st.session_state.sel_ship not in name_list: st.session_state.sel_ship = "전체"
+                    sel_name = st.selectbox("선사 선택 🚢", name_list, key="sel_ship", on_change=auto_fill_port)
 
                 st.divider()
 
-                # ✨ [UI 개조 1] 선사를 선택했을 때 '스마트 칩 카드'를 가장 상단에 예쁘게 띄웁니다!
+                # ✨ [UI 개조 1] 선사를 선택했을 때 '스마트 칩 카드'를 물때표보다 위에 예쁘게 띄웁니다!
                 if sel_name != "전체":
                     target_row = df_step2[df_step2["선사명"] == sel_name]
                     if not target_row.empty:
                         res_url = str(target_row["예약사이트"].values[0])
-                        # 예약 사이트 주소가 정상적으로 있을 때만 카드를 보여줌
                         if res_url.startswith("http"):
-                            # 도메인 이름만 예쁘게 추출 (예: paragon.sunsang24.com)
                             clean_domain = res_url.replace("https://", "").replace("http://", "").split("/")[0]
                             
-                            # 구글 시트 스마트 칩 느낌의 커스텀 HTML/CSS 카드
                             smart_chip_html = f"""
                             <div style="
                                 display: flex; align-items: center; justify-content: space-between;
@@ -416,9 +430,8 @@ elif menu == "🎣 낚시":
                             """
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
                             
-                # 기존 실시간 관측소 로직 시작
+                # 기존 실시간 관측소 로직 (스마트 칩 아래에 표시됨)
                 if sel_region2 != "전체":
-                    # KHOA 공공데이터 관측소 매핑
                     khoa_obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
                         "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
@@ -463,7 +476,7 @@ elif menu == "🎣 낚시":
                                                 
                                             if items:
                                                 curr_data = items[-1]
-                                                # ✨ [UI 개조 2] 실시간 풍속, 수온 칸을 조금 더 촘촘하게 배치했습니다.
+                                                # ✨ [UI 개조 2] 실시간 풍속, 수온 타이틀을 넣어 더 전문적으로 보이게!
                                                 st.markdown("##### 📡 근해 실시간 관측 정보")
                                                 w1, w2, w3 = st.columns(3)
                                                 wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
@@ -495,7 +508,7 @@ elif menu == "🎣 낚시":
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
                     
-                    # ✨ [UI 개조 3] 예약 사이트 버튼이 위로 올라갔으므로, 여기서는 모바일 달력 버튼만 넓게 꽉 채워줍니다.
+                    # ✨ [UI 개조 3] 버튼이 카드 안으로 흡수됐으므로 모바일 물때표 버튼만 시원하게 꽉 채워줍니다!
                     st.link_button(f"📱 {target_port} 모바일 물때 달력 (새 창 열기)", badatime_mobile_url, use_container_width=True)
 
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
