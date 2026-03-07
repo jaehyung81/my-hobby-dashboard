@@ -378,6 +378,45 @@ elif menu == "🎣 낚시":
 
                 st.divider()
 
+                # ✨ [UI 개조 1] 선사를 선택했을 때 '스마트 칩 카드'를 가장 상단에 예쁘게 띄웁니다!
+                if sel_name != "전체":
+                    target_row = df_step2[df_step2["선사명"] == sel_name]
+                    if not target_row.empty:
+                        res_url = str(target_row["예약사이트"].values[0])
+                        # 예약 사이트 주소가 정상적으로 있을 때만 카드를 보여줌
+                        if res_url.startswith("http"):
+                            # 도메인 이름만 예쁘게 추출 (예: paragon.sunsang24.com)
+                            clean_domain = res_url.replace("https://", "").replace("http://", "").split("/")[0]
+                            
+                            # 구글 시트 스마트 칩 느낌의 커스텀 HTML/CSS 카드
+                            smart_chip_html = f"""
+                            <div style="
+                                display: flex; align-items: center; justify-content: space-between;
+                                background-color: #f8f9fa; border: 1px solid #dadce0;
+                                border-radius: 12px; padding: 12px 20px; margin-bottom: 20px;
+                                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                            ">
+                                <div style="display: flex; align-items: center;">
+                                    <div style="background-color: #1a73e8; color: white; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-right: 15px;">
+                                        🚢
+                                    </div>
+                                    <div>
+                                        <div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px;">{sel_name}</div>
+                                        <div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div>
+                                    </div>
+                                </div>
+                                <a href="{res_url}" target="_blank" style="
+                                    background-color: #ff4b4b; color: white; text-decoration: none;
+                                    padding: 8px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;
+                                    transition: all 0.2s; border: none; cursor: pointer;
+                                ">
+                                    예약 사이트 바로가기
+                                </a>
+                            </div>
+                            """
+                            st.markdown(smart_chip_html, unsafe_allow_html=True)
+                            
+                # 기존 실시간 관측소 로직 시작
                 if sel_region2 != "전체":
                     # KHOA 공공데이터 관측소 매핑
                     khoa_obs_map = {
@@ -424,6 +463,8 @@ elif menu == "🎣 낚시":
                                                 
                                             if items:
                                                 curr_data = items[-1]
+                                                # ✨ [UI 개조 2] 실시간 풍속, 수온 칸을 조금 더 촘촘하게 배치했습니다.
+                                                st.markdown("##### 📡 근해 실시간 관측 정보")
                                                 w1, w2, w3 = st.columns(3)
                                                 wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
                                                 w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
@@ -454,16 +495,8 @@ elif menu == "🎣 낚시":
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
                     
-                    b1, b2 = st.columns(2)
-                    with b1:
-                        st.link_button(f"📱 {target_port} 모바일 물때 달력 (새 창)", badatime_mobile_url, use_container_width=True)
-                    with b2:
-                        if sel_name != "전체":
-                            target_row = df_step2[df_step2["선사명"] == sel_name]
-                            if not target_row.empty:
-                                res_url = str(target_row["예약사이트"].values[0])
-                                if res_url.startswith("http"):
-                                    st.link_button(f"🚢 {sel_name} 예약 사이트 바로가기", res_url, use_container_width=True, type="primary")
+                    # ✨ [UI 개조 3] 예약 사이트 버튼이 위로 올라갔으므로, 여기서는 모바일 달력 버튼만 넓게 꽉 채워줍니다.
+                    st.link_button(f"📱 {target_port} 모바일 물때 달력 (새 창 열기)", badatime_mobile_url, use_container_width=True)
 
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
                     st.caption(f"※ 완벽 매핑된 **[{target_port}]** (또는 인근 지역) 데이터입니다! 아래 화면에서 탭을 클릭해서 확인하세요!")
