@@ -271,16 +271,18 @@ elif menu == "🗓️ 일정":
         
         all_combined_list = []
         for n, d in fixed_events.items():
-            all_combined_list.append({"날짜": d, "내용": n, "연차구분": "-"})
+            all_combined_list.append({"날짜": d, "내용": n, "연차구분": "-", "메모": "-"})
         
         if not df_events.empty and "일자" in df_events.columns and "내용" in df_events.columns:
             for _, row in df_events.iterrows():
                 try:
                     v_type = str(row.get('연차구분', "")).strip()
+                    v_memo = str(row.get('메모', "")).strip() # ✨ 메모 데이터 추출
                     all_combined_list.append({
                         "날짜": pd.to_datetime(row['일자']).date(),
                         "내용": row['내용'],
-                        "연차구분": v_type if v_type else "-"
+                        "연차구분": v_type if v_type else "-",
+                        "메모": v_memo if v_memo else "-" # ✨ 딕셔너리에 추가
                     })
                 except:
                     continue
@@ -294,12 +296,14 @@ elif menu == "🗓️ 일정":
                     lambda x: f"D-{(x-today).days}" if x > today else "Today"
                 )
                 
+                # ✨ 화면 데이터프레임에 메모 컬럼 추가
                 st.dataframe(
-                    display_df[['날짜', 'D-Day', '내용', '연차구분']], 
+                    display_df[['날짜', 'D-Day', '내용', '연차구분', '메모']], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "연차구분": st.column_config.TextColumn("연차구분", width="small")
+                        "연차구분": st.column_config.TextColumn("연차구분", width="small"),
+                        "메모": st.column_config.TextColumn("메모", width="medium") # ✨ 너비 밸런스 조정
                     }
                 )
             else:
@@ -373,26 +377,38 @@ elif menu == "🎣 낚시":
                     df_step1 = df_step1[df_step1["지역1"] == sel_region1]
                     
                 with col3:
-                    # ✨ [핵심 수정 1] 상세 항구 리스트를 '지역(도/시)' 순으로 먼저 묶고, 그다음 가나다순 정렬!
+                    # ✨ 1. DB의 원래 값은 그대로 유지하되, 리스트 생성 시 지역(도/시) 기준으로 정렬
                     temp_ports = df_step1[df_step1["지역2"].astype(str).str.strip() != ""][["지역1", "지역2"]].drop_duplicates()
                     temp_ports = temp_ports.sort_values(by=["지역1", "지역2"])
                     region2_list = ["전체"] + temp_ports["지역2"].astype(str).tolist()
                     
+                    # ✨ 2. 화면에 보여줄 텍스트만 "[도/시] 항구명" 으로 예쁘게 포맷팅하는 딕셔너리
+                    port_format_dict = {"전체": "전체"}
+                    for _, row in temp_ports.iterrows():
+                        port_format_dict[str(row["지역2"])] = f"[{row['지역1']}] {row['지역2']}"
+                    
                     if st.session_state.sel_reg2 not in region2_list: st.session_state.sel_reg2 = "전체"
-                    sel_region2 = st.selectbox("상세 항구 ⚓", region2_list, key="sel_reg2")
+                    # ✨ 3. format_func 속성 적용!
+                    sel_region2 = st.selectbox("상세 항구 ⚓", region2_list, key="sel_reg2", format_func=lambda x: port_format_dict.get(x, x))
                 
                 df_step2 = df_step1.copy()
                 if sel_region2 != "전체": 
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
-                    # ✨ [핵심 수정 2] 선사명 역시 '지역(도/시) -> 상세항구 -> 선사명' 순으로 깔끔하게 정렬!
+                    # ✨ 선사명도 지역 -> 항구 -> 선사 순으로 묶어서 정렬
                     temp_ships = df_step2[df_step2["선사명"].astype(str).str.strip() != ""][["지역1", "지역2", "선사명"]].drop_duplicates()
                     temp_ships = temp_ships.sort_values(by=["지역1", "지역2", "선사명"])
                     name_list = ["전체"] + temp_ships["선사명"].astype(str).tolist()
                     
+                    # ✨ 선사명 화면 표시용 포맷 딕셔너리 ("[항구] 선사명" 형태로 노출)
+                    ship_format_dict = {"전체": "전체"}
+                    for _, row in temp_ships.iterrows():
+                        ship_format_dict[str(row["선사명"])] = f"[{row['지역2']}] {row['선사명']}"
+                    
                     if st.session_state.sel_ship not in name_list: st.session_state.sel_ship = "전체"
-                    sel_name = st.selectbox("선사 선택 🚢", name_list, key="sel_ship", on_change=auto_fill_port)
+                    # ✨ format_func 속성 적용!
+                    sel_name = st.selectbox("선사 선택 🚢", name_list, key="sel_ship", on_change=auto_fill_port, format_func=lambda x: ship_format_dict.get(x, x))
 
                 st.divider()
 
