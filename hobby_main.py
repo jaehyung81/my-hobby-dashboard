@@ -5,7 +5,7 @@ import requests
 import urllib.request
 import io
 import re
-from collections import defaultdict # ✨ 같은 날짜 묶어주는 마법 도구 추가
+from collections import defaultdict 
 from datetime import date, datetime, timedelta
 from korean_lunar_calendar import KoreanLunarCalendar
 import streamlit.components.v1 as components
@@ -125,7 +125,6 @@ if menu == "🏠 홈":
     st.title("환영합니다! 재형님 👋")
     st.subheader("🗓️ 주요 일정 (D-Day)")
     
-    # ✨ [D-Day 카드 UI 적용] 모든 일정을 모아서 '날짜별'로 완벽하게 그룹핑!
     all_future_events = []
     
     # 1. 고정 일정 담기
@@ -144,7 +143,7 @@ if menu == "🏠 홈":
                     all_future_events.append({"date": ev_date, "name": f"📂 {v_str}{row['내용']}"})
             except: pass
 
-    # 3. 날짜별로 묶어주기 (3월 12일에 2개가 있으면 하나로 통합!)
+    # 3. 날짜별로 묶어주기
     grouped_events = defaultdict(list)
     for ev in all_future_events:
         if ev["name"] not in grouped_events[ev["date"]]:
@@ -157,23 +156,20 @@ if menu == "🏠 홈":
         cols = st.columns(len(sorted_dates))
         for i, d in enumerate(sorted_dates):
             diff = (d - today).days
-            # 날짜에 따라 포인트 컬러 변경
             if diff == 0:
                 d_str = "Today!"
-                d_color = "#FF4B4B" # 빨강
+                d_color = "#FF4B4B"
             elif diff == 1:
                 d_str = "D-1"
-                d_color = "#FF8C00" # 주황
+                d_color = "#FF8C00"
             else:
                 d_str = f"D-{diff}"
-                d_color = "#0068C9" # 파랑
+                d_color = "#0068C9"
                 
             date_str = d.strftime("%m.%d")
             
-            # 카드 안에 들어갈 세부 일정들 (여러 개면 밑으로 추가됨)
             events_html = "".join([f"<div style='font-size:0.9rem; margin-bottom:6px; color:#333; line-height:1.3; word-break:keep-all;'>{ev}</div>" for ev in grouped_events[d]])
             
-            # 예쁜 카드 모양 HTML
             card_html = f"""
             <div style="border: 1px solid #e6e6e6; border-radius: 10px; padding: 15px; background-color: #ffffff; text-align: center; height: 100%; box-shadow: 2px 2px 8px rgba(0,0,0,0.04);">
                 <h3 style="margin: 0; color: {d_color}; font-size: 1.6rem; padding-bottom: 5px;">{d_str}</h3>
@@ -352,7 +348,6 @@ elif menu == "🎣 낚시":
         if not df_fishing.empty:
             if "지역1" in df_fishing.columns and "지역2" in df_fishing.columns and "선사명" in df_fishing.columns:
                 
-                # ✨ [역방향 선택 마법!] 선사를 고르면 항구를 찾아냅니다.
                 if "sel_reg1" not in st.session_state: st.session_state.sel_reg1 = "전체"
                 if "sel_reg2" not in st.session_state: st.session_state.sel_reg2 = "전체"
                 if "sel_ship" not in st.session_state: st.session_state.sel_ship = "전체"
@@ -360,7 +355,6 @@ elif menu == "🎣 낚시":
                 def auto_fill_port():
                     ship = st.session_state.sel_ship
                     if ship != "전체":
-                        # 선택한 배의 항구를 구글 시트에서 찾아서 강제로 채워줍니다!
                         port = df_fishing[df_fishing["선사명"] == ship]["지역2"].values
                         if len(port) > 0:
                             st.session_state.sel_reg2 = str(port[0])
@@ -379,7 +373,11 @@ elif menu == "🎣 낚시":
                     df_step1 = df_step1[df_step1["지역1"] == sel_region1]
                     
                 with col3:
-                    region2_list = ["전체"] + sorted([str(r) for r in df_step1["지역2"].unique() if str(r).strip() != ""])
+                    # ✨ [핵심 수정 1] 상세 항구 리스트를 '지역(도/시)' 순으로 먼저 묶고, 그다음 가나다순 정렬!
+                    temp_ports = df_step1[df_step1["지역2"].astype(str).str.strip() != ""][["지역1", "지역2"]].drop_duplicates()
+                    temp_ports = temp_ports.sort_values(by=["지역1", "지역2"])
+                    region2_list = ["전체"] + temp_ports["지역2"].astype(str).tolist()
+                    
                     if st.session_state.sel_reg2 not in region2_list: st.session_state.sel_reg2 = "전체"
                     sel_region2 = st.selectbox("상세 항구 ⚓", region2_list, key="sel_reg2")
                 
@@ -388,14 +386,16 @@ elif menu == "🎣 낚시":
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
-                    # 💡 on_change 속성을 걸어서, 선사를 고르는 순간 auto_fill_port 함수가 작동합니다!
-                    name_list = ["전체"] + sorted([str(n) for n in df_step2["선사명"].unique() if str(n).strip() != ""])
+                    # ✨ [핵심 수정 2] 선사명 역시 '지역(도/시) -> 상세항구 -> 선사명' 순으로 깔끔하게 정렬!
+                    temp_ships = df_step2[df_step2["선사명"].astype(str).str.strip() != ""][["지역1", "지역2", "선사명"]].drop_duplicates()
+                    temp_ships = temp_ships.sort_values(by=["지역1", "지역2", "선사명"])
+                    name_list = ["전체"] + temp_ships["선사명"].astype(str).tolist()
+                    
                     if st.session_state.sel_ship not in name_list: st.session_state.sel_ship = "전체"
                     sel_name = st.selectbox("선사 선택 🚢", name_list, key="sel_ship", on_change=auto_fill_port)
 
                 st.divider()
 
-                # ✨ [UI 개조 1] 선사를 선택했을 때 '스마트 칩 카드'를 물때표보다 위에 예쁘게 띄웁니다!
                 if sel_name != "전체":
                     target_row = df_step2[df_step2["선사명"] == sel_name]
                     if not target_row.empty:
@@ -430,7 +430,6 @@ elif menu == "🎣 낚시":
                             """
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
                             
-                # 기존 실시간 관측소 로직 (스마트 칩 아래에 표시됨)
                 if sel_region2 != "전체":
                     khoa_obs_map = {
                         "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
@@ -476,7 +475,6 @@ elif menu == "🎣 낚시":
                                                 
                                             if items:
                                                 curr_data = items[-1]
-                                                # ✨ [UI 개조 2] 실시간 풍속, 수온 타이틀을 넣어 더 전문적으로 보이게!
                                                 st.markdown("##### 📡 근해 실시간 관측 정보")
                                                 w1, w2, w3 = st.columns(3)
                                                 wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
@@ -495,7 +493,6 @@ elif menu == "🎣 낚시":
 
                     st.divider()
                     
-                    # ✨ [스마트 대체 검색]
                     region_words = str(sel_region2).split()
                     target_port = region_words[-1] 
                     target_city = region_words[0]  
@@ -508,7 +505,6 @@ elif menu == "🎣 낚시":
                     badatime_url = f"https://www.badatime.com/{b_id}/tide"
                     badatime_mobile_url = f"https://m.badatime.com/{b_id}.html"
                     
-                    # ✨ [UI 개조 3] 버튼이 카드 안으로 흡수됐으므로 모바일 물때표 버튼만 시원하게 꽉 채워줍니다!
                     st.link_button(f"📱 {target_port} 모바일 물때 달력 (새 창 열기)", badatime_mobile_url, use_container_width=True)
 
                     st.subheader("📊 통합 해양정보 대시보드 (바다타임 제공)")
