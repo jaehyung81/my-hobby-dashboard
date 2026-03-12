@@ -277,12 +277,12 @@ elif menu == "🗓️ 일정":
             for _, row in df_events.iterrows():
                 try:
                     v_type = str(row.get('연차구분', "")).strip()
-                    v_memo = str(row.get('메모', "")).strip() # ✨ 메모 데이터 추출
+                    v_memo = str(row.get('메모', "")).strip() 
                     all_combined_list.append({
                         "날짜": pd.to_datetime(row['일자']).date(),
                         "내용": row['내용'],
                         "연차구분": v_type if v_type else "-",
-                        "메모": v_memo if v_memo else "-" # ✨ 딕셔너리에 추가
+                        "메모": v_memo if v_memo else "-" 
                     })
                 except:
                     continue
@@ -296,14 +296,13 @@ elif menu == "🗓️ 일정":
                     lambda x: f"D-{(x-today).days}" if x > today else "Today"
                 )
                 
-                # ✨ 화면 데이터프레임에 메모 컬럼 추가
                 st.dataframe(
                     display_df[['날짜', 'D-Day', '내용', '연차구분', '메모']], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
                         "연차구분": st.column_config.TextColumn("연차구분", width="small"),
-                        "메모": st.column_config.TextColumn("메모", width="medium") # ✨ 너비 밸런스 조정
+                        "메모": st.column_config.TextColumn("메모", width="medium") 
                     }
                 )
             else:
@@ -377,18 +376,15 @@ elif menu == "🎣 낚시":
                     df_step1 = df_step1[df_step1["지역1"] == sel_region1]
                     
                 with col3:
-                    # ✨ 1. DB의 원래 값은 그대로 유지하되, 리스트 생성 시 지역(도/시) 기준으로 정렬
                     temp_ports = df_step1[df_step1["지역2"].astype(str).str.strip() != ""][["지역1", "지역2"]].drop_duplicates()
                     temp_ports = temp_ports.sort_values(by=["지역1", "지역2"])
                     region2_list = ["전체"] + temp_ports["지역2"].astype(str).tolist()
                     
-                    # ✨ 2. 화면에 보여줄 텍스트만 "[도/시] 항구명" 으로 예쁘게 포맷팅하는 딕셔너리
                     port_format_dict = {"전체": "전체"}
                     for _, row in temp_ports.iterrows():
                         port_format_dict[str(row["지역2"])] = f"[{row['지역1']}] {row['지역2']}"
                     
                     if st.session_state.sel_reg2 not in region2_list: st.session_state.sel_reg2 = "전체"
-                    # ✨ 3. format_func 속성 적용!
                     sel_region2 = st.selectbox("상세 항구 ⚓", region2_list, key="sel_reg2", format_func=lambda x: port_format_dict.get(x, x))
                 
                 df_step2 = df_step1.copy()
@@ -396,18 +392,15 @@ elif menu == "🎣 낚시":
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
-                    # ✨ 선사명도 지역 -> 항구 -> 선사 순으로 묶어서 정렬
                     temp_ships = df_step2[df_step2["선사명"].astype(str).str.strip() != ""][["지역1", "지역2", "선사명"]].drop_duplicates()
                     temp_ships = temp_ships.sort_values(by=["지역1", "지역2", "선사명"])
                     name_list = ["전체"] + temp_ships["선사명"].astype(str).tolist()
                     
-                    # ✨ 선사명 화면 표시용 포맷 딕셔너리 ("[항구] 선사명" 형태로 노출)
                     ship_format_dict = {"전체": "전체"}
                     for _, row in temp_ships.iterrows():
                         ship_format_dict[str(row["선사명"])] = f"[{row['지역2']}] {row['선사명']}"
                     
                     if st.session_state.sel_ship not in name_list: st.session_state.sel_ship = "전체"
-                    # ✨ format_func 속성 적용!
                     sel_name = st.selectbox("선사 선택 🚢", name_list, key="sel_ship", on_change=auto_fill_port, format_func=lambda x: ship_format_dict.get(x, x))
 
                 st.divider()
@@ -419,6 +412,31 @@ elif menu == "🎣 낚시":
                         if res_url.startswith("http"):
                             clean_domain = res_url.replace("https://", "").replace("http://", "").split("/")[0]
                             
+                            # ✨ [핵심 1] 선상24 번호 추출 및 링크 생성용 HTML 로직 추가
+                            sunsang_link_html = ""
+                            # 구글 시트에 '선상24_Ship_No' 열이 존재하고 값이 비어있지 않은지 체크
+                            if '선상24_Ship_No' in target_row.columns:
+                                s_no = target_row['선상24_Ship_No'].values[0]
+                                if pd.notna(s_no) and str(s_no).strip() != "":
+                                    # 내일 날짜 계산 (YYYY-MM-DD)
+                                    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                                    # 선상24 스케줄(달력) URL 생성
+                                    sunsang_url = f"https://www.sunsang24.com/ship/schedule/?sdate={tomorrow_date}&ship_no={str(s_no).strip()}"
+                                    
+                                    # 파란색 선상24 링크 뱃지 HTML
+                                    sunsang_link_html = f"""
+                                    <div style="margin-top: 8px;">
+                                        <a href="{sunsang_url}" target="_blank" style="
+                                            display: inline-block; background-color: #0068c9; color: white; 
+                                            text-decoration: none; padding: 4px 10px; border-radius: 4px; 
+                                            font-size: 0.8rem; font-weight: bold; border: 1px solid #005bb5;
+                                        ">
+                                            🔗 선상24 예약 바로가기 (내일 날짜 기준)
+                                        </a>
+                                    </div>
+                                    """
+                            
+                            # ✨ [핵심 2] 기존 스마트 칩 HTML 안에 선상24 링크 삽입
                             smart_chip_html = f"""
                             <div style="
                                 display: flex; align-items: center; justify-content: space-between;
@@ -433,14 +451,14 @@ elif menu == "🎣 낚시":
                                     <div>
                                         <div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px;">{sel_name}</div>
                                         <div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div>
-                                    </div>
+                                        {sunsang_link_html} </div>
                                 </div>
                                 <a href="{res_url}" target="_blank" style="
                                     background-color: #ff4b4b; color: white; text-decoration: none;
                                     padding: 8px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;
                                     transition: all 0.2s; border: none; cursor: pointer;
                                 ">
-                                    예약 사이트 바로가기
+                                    선사 메인 홈페이지 가기
                                 </a>
                             </div>
                             """
