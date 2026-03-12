@@ -416,7 +416,6 @@ elif menu == "🎣 낚시":
                             if '선상24_Ship_No' in target_row.columns:
                                 s_no = target_row['선상24_Ship_No'].values[0]
                                 if pd.notna(s_no) and str(s_no).strip() != "":
-                                    # ✨ [수정 1] 소수점(.0) 제거 로직 추가 (850.0 -> 850)
                                     try:
                                         clean_s_no = str(int(float(s_no)))
                                     except:
@@ -425,33 +424,12 @@ elif menu == "🎣 낚시":
                                     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
                                     sunsang_url = f"https://www.sunsang24.com/ship/schedule/?sdate={tomorrow_date}&ship_no={clean_s_no}"
                                     
-                                    # ✨ [수정 2] 들여쓰기(공백)를 완전히 제거하여 마크다운 코드 블록화 방지
-                                    sunsang_link_html = f"""
-<div style="margin-top: 8px;">
-    <a href="{sunsang_url}" target="_blank" style="display: inline-block; background-color: #0068c9; color: white; text-decoration: none; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; border: 1px solid #005bb5;">
-        🔗 선상24 예약 바로가기 (내일 날짜 기준)
-    </a>
-</div>
-"""
+                                    # ✨ HTML 마크다운 렌더링 에러를 완벽 방지하기 위해 태그를 한 줄로 작성했습니다.
+                                    sunsang_link_html = f'<div style="margin-top: 8px;"><a href="{sunsang_url}" target="_blank" style="display: inline-block; background-color: #0068c9; color: white; text-decoration: none; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; border: 1px solid #005bb5;">🔗 선상24 예약 바로가기 (내일 날짜 기준)</a></div>'
                             
-                            # ✨ [수정 3] 메인 HTML 부분도 들여쓰기(공백) 완전 제거
-                            smart_chip_html = f"""
-<div style="display: flex; align-items: center; justify-content: space-between; background-color: #f8f9fa; border: 1px solid #dadce0; border-radius: 12px; padding: 12px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display: flex; align-items: center;">
-        <div style="background-color: #1a73e8; color: white; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-right: 15px;">
-            🚢
-        </div>
-        <div>
-            <div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px;">{sel_name}</div>
-            <div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div>
-            {sunsang_link_html}
-        </div>
-    </div>
-    <a href="{res_url}" target="_blank" style="background-color: #ff4b4b; color: white; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; border: none; cursor: pointer;">
-        선사 메인 홈페이지 가기
-    </a>
-</div>
-"""
+                            # ✨ 메인 칩 HTML도 에러 방지를 위해 완전한 한 줄로 작성했습니다.
+                            smart_chip_html = f'<div style="display: flex; align-items: center; justify-content: space-between; background-color: #f8f9fa; border: 1px solid #dadce0; border-radius: 12px; padding: 12px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"><div style="display: flex; align-items: center;"><div style="background-color: #1a73e8; color: white; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-right: 15px;">🚢</div><div><div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px;">{sel_name}</div><div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div>{sunsang_link_html}</div></div><a href="{res_url}" target="_blank" style="background-color: #ff4b4b; color: white; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; border: none; cursor: pointer;">선사 메인 홈페이지 가기</a></div>'
+                            
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
                             
                 if sel_region2 != "전체":
