@@ -346,7 +346,12 @@ elif menu == "🎣 낚시":
     tab1, tab2, tab3 = st.tabs(["📅 출조 포털 & 물때", "🚢 선사정보", "📸 낚시사진"])
     
     with tab1:
-        st.subheader("📅 원클릭 출조 및 실시간 정보")
+        # ✨ [변경] 헤더 부분에 마크 안내(범례) 텍스트 추가!
+        col_hdr1, col_hdr2 = st.columns([1, 1])
+        with col_hdr1:
+            st.subheader("📅 원클릭 출조 및 실시간 정보")
+        with col_hdr2:
+            st.markdown("<div style='text-align: right; margin-top: 15px; font-size: 0.9rem; color: #555; font-weight: bold;'>⭐ 주요 관심 선사 &nbsp;&nbsp;|&nbsp;&nbsp; ⚓ 로구만 프렌즈 선사</div>", unsafe_allow_html=True)
         
         if not df_fishing.empty:
             if "지역1" in df_fishing.columns and "지역2" in df_fishing.columns and "선사명" in df_fishing.columns:
@@ -392,7 +397,6 @@ elif menu == "🎣 낚시":
                     df_step2 = df_step2[df_step2["지역2"] == sel_region2]
                     
                 with col4:
-                    # ✨ [추가] 선사명 옆에 주요관심/로구만 아이콘을 붙여주기 위한 컬럼 포함
                     fetch_cols = ["지역1", "지역2", "선사명"]
                     if "주요 관심 선사" in df_step2.columns: fetch_cols.append("주요 관심 선사")
                     if "로구만 프렌즈 선사" in df_step2.columns: fetch_cols.append("로구만 프렌즈 선사")
@@ -401,23 +405,17 @@ elif menu == "🎣 낚시":
                     temp_ships = temp_ships.sort_values(by=["지역1", "지역2", "선사명"])
                     name_list = ["전체"] + temp_ships["선사명"].astype(str).tolist()
                     
-                    # ✨ [핵심] 콤보박스에 보여줄 텍스트 포맷팅 (아이콘 추가)
                     ship_format_dict = {"전체": "전체"}
                     for _, row in temp_ships.iterrows():
                         s_name = str(row["선사명"])
                         display_text = f"[{row['지역2']}] {s_name}"
                         
-                        # 주요 관심 선사 체크 (O, v, 1 등 어떤 값이든 비어있지 않으면)
-                        is_fav = False
-                        is_roguman = False
-                        
+                        # ✨ [변경] 아이콘을 노란색 별과 파란색 닻 모양으로 명확히 구분!
                         if "주요 관심 선사" in row and str(row["주요 관심 선사"]).strip() and str(row["주요 관심 선사"]).strip().upper() != "NAN":
-                            display_text += " 🌟"
-                            is_fav = True
+                            display_text += " ⭐"
                             
                         if "로구만 프렌즈 선사" in row and str(row["로구만 프렌즈 선사"]).strip() and str(row["로구만 프렌즈 선사"]).strip().upper() != "NAN":
-                            display_text += " 🤝"
-                            is_roguman = True
+                            display_text += " ⚓"
                             
                         ship_format_dict[s_name] = display_text
                     
@@ -433,13 +431,13 @@ elif menu == "🎣 낚시":
                         if res_url.startswith("http"):
                             clean_domain = res_url.replace("https://", "").replace("http://", "").split("/")[0]
                             
-                            # ✨ [추가] 선택된 선사의 뱃지 상태 추출
+                            # ✨ [변경] 뱃지 색상도 구분이 잘 되도록 수정 (관심=노랑, 로구만=파랑)
                             fav_badge = ""
                             roguman_badge = ""
                             if "주요 관심 선사" in target_row.columns and str(target_row["주요 관심 선사"].values[0]).strip() and str(target_row["주요 관심 선사"].values[0]).strip().upper() != "NAN":
-                                fav_badge = '<span style="background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ffeeba; margin-left: 8px;">🌟 관심선사</span>'
+                                fav_badge = '<span style="background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ffeeba; margin-left: 8px;">⭐ 관심선사</span>'
                             if "로구만 프렌즈 선사" in target_row.columns and str(target_row["로구만 프렌즈 선사"].values[0]).strip() and str(target_row["로구만 프렌즈 선사"].values[0]).strip().upper() != "NAN":
-                                roguman_badge = '<span style="background-color: #d1ecf1; color: #0c5460; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #bee5eb; margin-left: 4px;">🤝 로구만</span>'
+                                roguman_badge = '<span style="background-color: #cce5ff; color: #004085; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #b8daff; margin-left: 4px;">⚓ 로구만</span>'
                             
                             sunsang_link_html = ""
                             if '선상24_Ship_No' in target_row.columns:
@@ -453,13 +451,11 @@ elif menu == "🎣 낚시":
                                     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
                                     sunsang_url = f"https://www.sunsang24.com/ship/schedule/?sdate={tomorrow_date}&ship_no={clean_s_no}"
                                     
-                                    # ✨ [수정] 마크다운 깨짐 방지용 한 줄 HTML
                                     sunsang_link_html = f'<a href="{sunsang_url}" target="_blank" style="background-color: #0068c9; color: white; text-decoration: none; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 0.85rem; text-align: center; border: none; cursor: pointer; display: block; width: 100%;">🔗 선상24 바로가기 (내일 날짜)</a>'
                             
                             main_link_html = f'<a href="{res_url}" target="_blank" style="background-color: #ff4b4b; color: white; text-decoration: none; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 0.85rem; text-align: center; border: none; cursor: pointer; display: block; width: 100%;">선사 메인 홈페이지 가기</a>'
                             buttons_html = f'<div style="display: flex; flex-direction: column; gap: 8px; width: 220px; flex-shrink: 0;">{main_link_html}{sunsang_link_html}</div>'
                             
-                            # ✨ [핵심] 선사명 옆에 뱃지(fav_badge, roguman_badge)가 표시되도록 조립!
                             smart_chip_html = f'<div style="display: flex; align-items: center; justify-content: space-between; background-color: #f8f9fa; border: 1px solid #dadce0; border-radius: 12px; padding: 12px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"><div style="display: flex; align-items: center;"><div style="background-color: #1a73e8; color: white; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-right: 15px;">🚢</div><div><div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px; display: flex; align-items: center;">{sel_name}{fav_badge}{roguman_badge}</div><div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div></div></div>{buttons_html}</div>'
                             
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
