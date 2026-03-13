@@ -346,7 +346,6 @@ elif menu == "🎣 낚시":
     tab1, tab2, tab3 = st.tabs(["📅 출조 포털 & 물때", "🚢 선사정보", "📸 낚시사진"])
     
     with tab1:
-        # ✨ [변경] 헤더 부분에 마크 안내(범례) 텍스트 추가!
         col_hdr1, col_hdr2 = st.columns([1, 1])
         with col_hdr1:
             st.subheader("📅 원클릭 출조 및 실시간 정보")
@@ -410,7 +409,6 @@ elif menu == "🎣 낚시":
                         s_name = str(row["선사명"])
                         display_text = f"[{row['지역2']}] {s_name}"
                         
-                        # ✨ [변경] 아이콘을 노란색 별과 파란색 닻 모양으로 명확히 구분!
                         if "주요 관심 선사" in row and str(row["주요 관심 선사"]).strip() and str(row["주요 관심 선사"]).strip().upper() != "NAN":
                             display_text += " ⭐"
                             
@@ -431,7 +429,6 @@ elif menu == "🎣 낚시":
                         if res_url.startswith("http"):
                             clean_domain = res_url.replace("https://", "").replace("http://", "").split("/")[0]
                             
-                            # ✨ [변경] 뱃지 색상도 구분이 잘 되도록 수정 (관심=노랑, 로구만=파랑)
                             fav_badge = ""
                             roguman_badge = ""
                             if "주요 관심 선사" in target_row.columns and str(target_row["주요 관심 선사"].values[0]).strip() and str(target_row["주요 관심 선사"].values[0]).strip().upper() != "NAN":
@@ -461,65 +458,93 @@ elif menu == "🎣 낚시":
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
                             
                 if sel_region2 != "전체":
-                    khoa_obs_map = {
-                        "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
-                        "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
-                        "태안": "DT_0050", "안흥": "DT_0067", "신진도": "DT_0067", "백사장": "DT_0067", "안면도": "DT_0067", "영목": "DT_0067",
-                        "서천": "DT_0051", "홍원": "DT_0051", "마량": "DT_0051", "장항": "DT_0024",
-                        "당진": "DT_0017", "장고항": "DT_0017", "도비도": "DT_0017", "대산": "DT_0017",
-                        "시흥": "DT_0008", "오이도": "DT_0008", "시화": "DT_0008", "안산": "DT_0008",
-                        "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
-                        "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
-                    }
-                    obs_code = next((v for k, v in khoa_obs_map.items() if k in sel_region2), "DT_0018")
+                    # ✨ [변경] 실시간 관측 정보 영역을 2단으로 나누기!
+                    col_obs, col_acc = st.columns([2.5, 1])
                     
-                    try:
-                        if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
-                            api_key = st.secrets["KHOA_API_KEY"].strip()
-                            req_date_str = t_date.strftime("%Y%m%d")
-                            
-                            url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
-                            res_1 = requests.get(url_1, timeout=10)
-                            
-                            if res_1.status_code == 200:
-                                try:
-                                    data1 = res_1.json()
-                                    if "OpenAPI_ServiceResponse" in data1:
-                                        st.error(f"🚨 공공데이터포털 접속 거절: {data1['OpenAPI_ServiceResponse'].get('cmmMsgHeader', {}).get('returnAuthMsg', '')}")
-                                    else:
-                                        response_node = data1.get("response", {})
-                                        header1 = response_node.get("header", data1.get("header", {}))
-                                        body1 = response_node.get("body", data1.get("body", {}))
-                                        
-                                        result_code = header1.get("resultCode")
-                                        if result_code == "00" and body1.get("totalCount", 0) > 0:
-                                            total_count = body1.get("totalCount")
-                                            url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
-                                            res_2 = requests.get(url_2, timeout=10)
-                                            data2 = res_2.json()
-                                            
-                                            body2 = data2.get("response", {}).get("body", data2.get("body", {}))
-                                            raw_items = body2.get("items", {})
-                                            items = raw_items.get("item", []) if isinstance(raw_items, dict) else raw_items
-                                            if not isinstance(items, list): items = [items]
-                                                
-                                            if items:
-                                                curr_data = items[-1]
-                                                st.markdown("##### 📡 근해 실시간 관측 정보")
-                                                w1, w2, w3 = st.columns(3)
-                                                wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
-                                                w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
-                                                w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
-                                                w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
-                                                
-                                                st.caption(f"🕒 실시간 관측 시간: {curr_data.get('obsrvnDt', '알수없음')} (관측소: {curr_data.get('obsvtrNm', '알수없음')})")
-                                            else: st.warning(f"⚠️ 공공데이터포털 서버 통신 오류")
+                    with col_obs:
+                        khoa_obs_map = {
+                            "군산": "DT_0018", "비응": "DT_0018", "야미도": "DT_0018", "선유도": "DT_0018", "새만금": "DT_0018",
+                            "보령": "DT_0025", "대천": "DT_0025", "무창포": "DT_0025", "오천": "DT_0025", "회변": "DT_0025",
+                            "태안": "DT_0050", "안흥": "DT_0067", "신진도": "DT_0067", "백사장": "DT_0067", "안면도": "DT_0067", "영목": "DT_0067",
+                            "서천": "DT_0051", "홍원": "DT_0051", "마량": "DT_0051", "장항": "DT_0024",
+                            "당진": "DT_0017", "장고항": "DT_0017", "도비도": "DT_0017", "대산": "DT_0017",
+                            "시흥": "DT_0008", "오이도": "DT_0008", "시화": "DT_0008", "안산": "DT_0008",
+                            "인천": "DT_0001", "연안부두": "DT_0001", "영종도": "DT_0001", "남항": "DT_0001",
+                            "고성": "DT_0012", "대진": "DT_0012", "공현진": "DT_0012", "속초": "DT_0012", "아야진": "DT_0012",
+                        }
+                        obs_code = next((v for k, v in khoa_obs_map.items() if k in sel_region2), "DT_0018")
+                        
+                        try:
+                            if hasattr(st, "secrets") and "KHOA_API_KEY" in st.secrets:
+                                api_key = st.secrets["KHOA_API_KEY"].strip()
+                                req_date_str = t_date.strftime("%Y%m%d")
+                                
+                                url_1 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo=1&numOfRows=1&type=json"
+                                res_1 = requests.get(url_1, timeout=10)
+                                
+                                if res_1.status_code == 200:
+                                    try:
+                                        data1 = res_1.json()
+                                        if "OpenAPI_ServiceResponse" in data1:
+                                            st.error(f"🚨 공공데이터포털 접속 거절: {data1['OpenAPI_ServiceResponse'].get('cmmMsgHeader', {}).get('returnAuthMsg', '')}")
                                         else:
-                                            if t_date > today: st.info("🔮 미래 날짜는 아직 실시간 데이터가 없습니다.")
-                                            else: st.warning(f"🚨 현재 해당 지역 근처 관측소 데이터 점검 중")
-                                except ValueError: st.warning("🚨 공공데이터포털 서버 점검 중")
-                            else: st.error(f"🚨 서버 통신 실패! {res_1.status_code}")
-                    except Exception as e: st.error(f"🚨 통신 에러: {e}")
+                                            response_node = data1.get("response", {})
+                                            header1 = response_node.get("header", data1.get("header", {}))
+                                            body1 = response_node.get("body", data1.get("body", {}))
+                                            
+                                            result_code = header1.get("resultCode")
+                                            if result_code == "00" and body1.get("totalCount", 0) > 0:
+                                                total_count = body1.get("totalCount")
+                                                url_2 = f"https://apis.data.go.kr/1192136/dtRecent/GetDTRecentApiService?serviceKey={api_key}&obsCode={obs_code}&reqDate={req_date_str}&pageNo={total_count}&numOfRows=1&type=json"
+                                                res_2 = requests.get(url_2, timeout=10)
+                                                data2 = res_2.json()
+                                                
+                                                body2 = data2.get("response", {}).get("body", data2.get("body", {}))
+                                                raw_items = body2.get("items", {})
+                                                items = raw_items.get("item", []) if isinstance(raw_items, dict) else raw_items
+                                                if not isinstance(items, list): items = [items]
+                                                    
+                                                if items:
+                                                    curr_data = items[-1]
+                                                    st.markdown("##### 📡 근해 실시간 관측 정보")
+                                                    w1, w2, w3 = st.columns(3)
+                                                    wind_val = curr_data.get('wspd', curr_data.get('wind_speed', '-'))
+                                                    w1.metric("💨 실시간 풍속", f"{wind_val} m/s")
+                                                    w2.metric("🌡️ 현재 수온", f"{curr_data.get('wtem', curr_data.get('water_temp', '-'))} ℃")
+                                                    w3.metric("📏 실시간 조위", f"{curr_data.get('bscTdlvHgt', curr_data.get('tide_level', '-'))} cm")
+                                                    
+                                                    st.caption(f"🕒 실시간 관측 시간: {curr_data.get('obsrvnDt', '알수없음')} (관측소: {curr_data.get('obsvtrNm', '알수없음')})")
+                                                else: st.warning(f"⚠️ 공공데이터포털 서버 통신 오류")
+                                            else:
+                                                if t_date > today: st.info("🔮 미래 날짜는 아직 실시간 데이터가 없습니다.")
+                                                else: st.warning(f"🚨 현재 해당 지역 근처 관측소 데이터 점검 중")
+                                    except ValueError: st.warning("🚨 공공데이터포털 서버 점검 중")
+                                else: st.error(f"🚨 서버 통신 실패! {res_1.status_code}")
+                        except Exception as e: st.error(f"🚨 통신 에러: {e}")
+
+                    with col_acc:
+                        # ✨ [추가] 우측 영역에 예약금 환불계좌 카드 디자인 (복사하기 쉽도록 텍스트 구성)
+                        account_html = """
+                        <div style="background-color: #ffffff; border: 1px solid #dadce0; border-radius: 12px; padding: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                            <div style="font-weight: bold; font-size: 0.95rem; color: #202124; margin-bottom: 12px; display: flex; align-items: center;">
+                                💳 예약/환불 계좌
+                            </div>
+                            <div style="font-size: 0.85rem; color: #333;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="background-color:#e8f0fe; color:#1a73e8; padding:3px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem;">토스</span>
+                                    <span style="font-family: monospace; font-weight: 600; font-size: 0.9rem;">1001-2501-0108</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="background-color:#fae100; color:#371d1e; padding:3px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem;">카카오</span>
+                                    <span style="font-family: monospace; font-weight: 600; font-size: 0.9rem;">3333058783320</span>
+                                </div>
+                                <div style="border-top: 1px dashed #eee; padding-top: 8px; text-align: right; font-size: 0.8rem; color: #5f6368;">
+                                    예금주: <strong style="color:#202124;">이재형</strong>
+                                </div>
+                            </div>
+                        </div>
+                        """
+                        st.markdown(account_html, unsafe_allow_html=True)
 
                     st.divider()
                     
