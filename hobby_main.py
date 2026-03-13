@@ -447,18 +447,31 @@ elif menu == "🎣 낚시":
                                         
                                     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
                                     sunsang_url = f"https://www.sunsang24.com/ship/schedule/?sdate={tomorrow_date}&ship_no={clean_s_no}"
-                                    
                                     sunsang_link_html = f'<a href="{sunsang_url}" target="_blank" style="background-color: #0068c9; color: white; text-decoration: none; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 0.85rem; text-align: center; border: none; cursor: pointer; display: block; width: 100%;">🔗 선상24 바로가기 (내일 날짜)</a>'
                             
+                            # ✨ [추가] 더피싱 링크 자동화 로직
+                            thefishing_link_html = ""
+                            if '더피싱_Ship_No' in target_row.columns:
+                                tf_no = target_row['더피싱_Ship_No'].values[0]
+                                if pd.notna(tf_no) and str(tf_no).strip() != "":
+                                    try:
+                                        clean_tf_no = str(int(float(tf_no)))
+                                    except:
+                                        clean_tf_no = str(tf_no).strip()
+                                        
+                                    tf_url = f"https://thefishing.kr/reservation/list.php?uid={clean_tf_no}"
+                                    thefishing_link_html = f'<a href="{tf_url}" target="_blank" style="background-color: #d11820; color: white; text-decoration: none; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 0.85rem; text-align: center; border: none; cursor: pointer; display: block; width: 100%;">🔗 더피싱 예약 바로가기</a>'
+
                             main_link_html = f'<a href="{res_url}" target="_blank" style="background-color: #ff4b4b; color: white; text-decoration: none; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 0.85rem; text-align: center; border: none; cursor: pointer; display: block; width: 100%;">선사 메인 홈페이지 가기</a>'
-                            buttons_html = f'<div style="display: flex; flex-direction: column; gap: 8px; width: 220px; flex-shrink: 0;">{main_link_html}{sunsang_link_html}</div>'
+                            
+                            # 선상24와 더피싱 버튼이 모두 있을 경우를 대비해 묶어줍니다
+                            buttons_html = f'<div style="display: flex; flex-direction: column; gap: 8px; width: 220px; flex-shrink: 0;">{main_link_html}{sunsang_link_html}{thefishing_link_html}</div>'
                             
                             smart_chip_html = f'<div style="display: flex; align-items: center; justify-content: space-between; background-color: #f8f9fa; border: 1px solid #dadce0; border-radius: 12px; padding: 12px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"><div style="display: flex; align-items: center;"><div style="background-color: #1a73e8; color: white; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-right: 15px;">🚢</div><div><div style="font-weight: bold; font-size: 1.1rem; color: #202124; margin-bottom: 2px; display: flex; align-items: center;">{sel_name}{fav_badge}{roguman_badge}</div><div style="font-size: 0.85rem; color: #5f6368;">{clean_domain}</div></div></div>{buttons_html}</div>'
                             
                             st.markdown(smart_chip_html, unsafe_allow_html=True)
                             
                 if sel_region2 != "전체":
-                    # ✨ [변경] 실시간 관측 정보 영역을 2단으로 나누기!
                     col_obs, col_acc = st.columns([2.5, 1])
                     
                     with col_obs:
@@ -523,7 +536,6 @@ elif menu == "🎣 낚시":
                         except Exception as e: st.error(f"🚨 통신 에러: {e}")
 
                     with col_acc:
-                        # ✨ [추가] 우측 영역에 예약금 환불계좌 카드 디자인 (복사하기 쉽도록 텍스트 구성)
                         account_html = """
                         <div style="background-color: #ffffff; border: 1px solid #dadce0; border-radius: 12px; padding: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); height: 100%; display: flex; flex-direction: column; justify-content: center;">
                             <div style="font-weight: bold; font-size: 0.95rem; color: #202124; margin-bottom: 12px; display: flex; align-items: center;">
