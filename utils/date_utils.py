@@ -94,7 +94,7 @@ def get_fixed_events(base_date: date = None) -> dict:
         base_date = date.today()
 
     events = {
-        "💰 로또 추첨일": get_next_lotto_date(base_date),
+        "💰 로또 구매/추첨일": get_next_lotto_date(base_date),
     }
 
     # 가족 생일/기념일 자동 계산
