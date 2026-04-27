@@ -1,6 +1,7 @@
 """
 🏠 홈 페이지
 - D-Day 카드 (가장 가까운 5일치 일정)
+- 일정 소스: 고정일정 + 구글 캘린더 (+ 구글시트 백업)
 - 검색박스 (구글/네이버)
 - 바로가기 링크
 """
@@ -11,6 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from utils.date_utils import get_fixed_events, calculate_dday
+from utils.calendar_loader import load_calendar_events, is_calendar_available
+from utils.constants import GOOGLE_CALENDAR_ID, CALENDAR_DAYS_AHEAD
 
 
 def render(df_events: pd.DataFrame):
@@ -54,7 +57,7 @@ def _render_dday_cards(df_events: pd.DataFrame):
 
 
 def _collect_all_events(df_events: pd.DataFrame, today: date) -> list:
-    """고정 일정 + 엑셀 일정 모두 수집"""
+    """고정 일정 + 구글 캘린더 + 구글시트(백업) 모두 수집"""
     all_events = []
 
     # 1) 고정 일정 (가족 생일, 로또)
@@ -62,22 +65,38 @@ def _collect_all_events(df_events: pd.DataFrame, today: date) -> list:
         if d_obj >= today:
             all_events.append({"date": d_obj, "name": name})
 
-    # 2) 구글시트 엑셀 일정
-    if (not df_events.empty
-            and "일자" in df_events.columns
-            and "내용" in df_events.columns):
-        for _, row in df_events.iterrows():
-            try:
-                ev_date = pd.to_datetime(row["일자"]).date()
-                if ev_date >= today:
-                    v_type = str(row.get("연차구분", "")).strip()
-                    v_str = f"[{v_type}] " if v_type else ""
+    # 2) 구글 캘린더 일정 (메인 소스!)
+    calendar_loaded = False
+    if is_calendar_available():
+        cal_events = load_calendar_events(
+            GOOGLE_CALENDAR_ID, CALENDAR_DAYS_AHEAD
+        )
+        if cal_events:
+            calendar_loaded = True
+            for ev in cal_events:
+                if ev["date"] >= today:
                     all_events.append({
-                        "date": ev_date,
-                        "name": f"📂 {v_str}{row['내용']}"
+                        "date": ev["date"],
+                        "name": f"📅 {ev['summary']}"
                     })
-            except Exception:
-                continue
+
+    # 3) 구글시트 일정 (캘린더 로드 실패시 백업용!)
+    if not calendar_loaded:
+        if (not df_events.empty
+                and "일자" in df_events.columns
+                and "내용" in df_events.columns):
+            for _, row in df_events.iterrows():
+                try:
+                    ev_date = pd.to_datetime(row["일자"]).date()
+                    if ev_date >= today:
+                        v_type = str(row.get("연차구분", "")).strip()
+                        v_str = f"[{v_type}] " if v_type else ""
+                        all_events.append({
+                            "date": ev_date,
+                            "name": f"📂 {v_str}{row['내용']}"
+                        })
+                except Exception:
+                    continue
 
     return all_events
 

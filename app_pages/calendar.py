@@ -1,7 +1,7 @@
 """
 🗓️ 일정 페이지
 - 날짜 선택 및 날짜 계산기
-- 해당 날짜 일정 조회
+- 해당 날짜 일정 조회 (구글 캘린더 + 구글시트 백업)
 - 전체 일정 리스트 (D-Day 순)
 """
 
@@ -10,12 +10,19 @@ import pandas as pd
 import streamlit as st
 
 from utils.date_utils import get_fixed_events
-from utils.constants import REAL_SHEET_URL
+from utils.constants import REAL_SHEET_URL, GOOGLE_CALENDAR_ID, CALENDAR_DAYS_AHEAD
+from utils.calendar_loader import load_calendar_events, is_calendar_available
 
 
 def render(df_events: pd.DataFrame):
     """일정 페이지 렌더링 진입점"""
     st.title("상세 일정 및 메모 관리 🗓️")
+
+    # 일정 소스 표시
+    if is_calendar_available():
+        st.caption("📅 일정 소스: **구글 캘린더** 연동 중")
+    else:
+        st.caption("📂 일정 소스: **구글 시트** (캘린더 미연동)")
 
     c1, c2 = st.columns([1, 2])
     today = date.today()
@@ -36,10 +43,10 @@ def _render_date_picker(today: date) -> date:
     st.subheader("📅 날짜 선택")
     sel_date = st.date_input("조회할 날짜", value=today,
                              key="sel_date_picker")
-    st.info("💡 일정과 메모는 아래 구글 시트에서 관리하세요.")
-    st.link_button("📊 구글 시트 직접 편집하기",
+    st.info("💡 일정 등록은 클로드 채팅에서 구글 캘린더로 등록하세요!")
+    st.link_button("📊 구글 시트 직접 편집하기 (백업용)",
                    REAL_SHEET_URL,
-                   use_container_width=True, type="primary")
+                   use_container_width=True, type="secondary")
     return sel_date
 
 
@@ -80,24 +87,40 @@ def _render_daily_events(df_events: pd.DataFrame,
             st.success(f"📌 **{name}**")
             found = True
 
-    # 엑셀 일정
-    if (not df_events.empty
-            and "일자" in df_events.columns
-            and "내용" in df_events.columns):
-        for _, row in df_events.iterrows():
-            try:
-                ev_date = pd.to_datetime(row["일자"]).date()
-                if ev_date == sel_date:
-                    v_type = str(row.get("연차구분", "")).strip()
-                    v_str = f"[{v_type}] " if v_type else ""
-                    st.success(f"📂 **{v_str}{row['내용']}**")
-
-                    memo = row.get("메모", "")
-                    if memo and str(memo).strip():
-                        st.warning(f"📝 **메모:** {memo}")
+    # 구글 캘린더 일정
+    calendar_loaded = False
+    if is_calendar_available():
+        cal_events = load_calendar_events(
+            GOOGLE_CALENDAR_ID, CALENDAR_DAYS_AHEAD
+        )
+        if cal_events:
+            calendar_loaded = True
+            for ev in cal_events:
+                if ev["date"] == sel_date:
+                    st.success(f"📅 **{ev['summary']}**")
+                    if ev["description"]:
+                        st.warning(f"📝 **메모:** {ev['description']}")
                     found = True
-            except Exception:
-                continue
+
+    # 구글시트 일정 (캘린더 미연동시 백업)
+    if not calendar_loaded:
+        if (not df_events.empty
+                and "일자" in df_events.columns
+                and "내용" in df_events.columns):
+            for _, row in df_events.iterrows():
+                try:
+                    ev_date = pd.to_datetime(row["일자"]).date()
+                    if ev_date == sel_date:
+                        v_type = str(row.get("연차구분", "")).strip()
+                        v_str = f"[{v_type}] " if v_type else ""
+                        st.success(f"📂 **{v_str}{row['내용']}**")
+
+                        memo = row.get("메모", "")
+                        if memo and str(memo).strip():
+                            st.warning(f"📝 **메모:** {memo}")
+                        found = True
+                except Exception:
+                    continue
 
     if not found:
         st.info("해당 날짜에 등록된 일정이 없습니다.")
@@ -112,25 +135,42 @@ def _render_all_events_list(df_events: pd.DataFrame, today: date):
     # 고정 일정
     for n, d in get_fixed_events(today).items():
         all_events.append({
-            "날짜": d, "내용": n, "연차구분": "-", "메모": "-"
+            "날짜": d, "내용": n, "소스": "고정", "메모": "-"
         })
 
-    # 엑셀 일정
-    if (not df_events.empty
-            and "일자" in df_events.columns
-            and "내용" in df_events.columns):
-        for _, row in df_events.iterrows():
-            try:
-                v_type = str(row.get("연차구분", "")).strip()
-                v_memo = str(row.get("메모", "")).strip()
+    # 구글 캘린더 일정
+    calendar_loaded = False
+    if is_calendar_available():
+        cal_events = load_calendar_events(
+            GOOGLE_CALENDAR_ID, CALENDAR_DAYS_AHEAD
+        )
+        if cal_events:
+            calendar_loaded = True
+            for ev in cal_events:
                 all_events.append({
-                    "날짜": pd.to_datetime(row["일자"]).date(),
-                    "내용": row["내용"],
-                    "연차구분": v_type if v_type else "-",
-                    "메모": v_memo if v_memo else "-"
+                    "날짜": ev["date"],
+                    "내용": ev["summary"],
+                    "소스": "📅 캘린더",
+                    "메모": ev["description"] if ev["description"] else "-"
                 })
-            except Exception:
-                continue
+
+    # 구글시트 일정 (백업)
+    if not calendar_loaded:
+        if (not df_events.empty
+                and "일자" in df_events.columns
+                and "내용" in df_events.columns):
+            for _, row in df_events.iterrows():
+                try:
+                    v_type = str(row.get("연차구분", "")).strip()
+                    v_memo = str(row.get("메모", "")).strip()
+                    all_events.append({
+                        "날짜": pd.to_datetime(row["일자"]).date(),
+                        "내용": row["내용"],
+                        "소스": f"📂 시트{f' [{v_type}]' if v_type else ''}",
+                        "메모": v_memo if v_memo else "-"
+                    })
+                except Exception:
+                    continue
 
     future = [e for e in all_events if e["날짜"] >= today]
 
@@ -144,11 +184,11 @@ def _render_all_events_list(df_events: pd.DataFrame, today: date):
     )
 
     st.dataframe(
-        display_df[["날짜", "D-Day", "내용", "연차구분", "메모"]],
+        display_df[["날짜", "D-Day", "내용", "소스", "메모"]],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "연차구분": st.column_config.TextColumn("연차구분", width="small"),
+            "소스": st.column_config.TextColumn("소스", width="small"),
             "메모": st.column_config.TextColumn("메모", width="medium"),
         }
     )
