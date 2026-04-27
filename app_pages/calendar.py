@@ -43,10 +43,16 @@ def _render_date_picker(today: date) -> date:
     st.subheader("📅 날짜 선택")
     sel_date = st.date_input("조회할 날짜", value=today,
                              key="sel_date_picker")
-    st.info("💡 일정 등록은 클로드 채팅에서 구글 캘린더로 등록하세요!")
-    st.link_button("📊 구글 시트 직접 편집하기 (백업용)",
-                   REAL_SHEET_URL,
-                   use_container_width=True, type="secondary")
+    st.info("💡 일정 등록/수정은 클로드 채팅에서 구글 캘린더로 관리하세요!")
+    btn1, btn2 = st.columns(2)
+    with btn1:
+        st.link_button("🤖 Claude.ai",
+                       "https://claude.ai/",
+                       use_container_width=True, type="primary")
+    with btn2:
+        st.link_button("📅 Google Calendar",
+                       "https://calendar.google.com/",
+                       use_container_width=True, type="secondary")
     return sel_date
 
 
