@@ -48,7 +48,7 @@ def _render_date_picker(today: date) -> date:
     with btn1:
         st.link_button("🤖 Claude.ai",
                        "https://claude.ai/",
-                       use_container_width=True, type="primary")
+                       use_container_width=True, type="secondary")
     with btn2:
         st.link_button("📅 Google Calendar",
                        "https://calendar.google.com/",
