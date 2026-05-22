@@ -22,7 +22,7 @@ from utils.constants import (
 
 
 @st.cache_data(ttl=CACHE_TTL)
-def load_csv_from_url(url: str) -> pd.DataFrame:
+def load_csv_from_url(url: str, skip_first_row: bool = False) -> pd.DataFrame:
     """
     구글 시트 CSV URL에서 데이터 로드
     - 기본: requests 로 시도
@@ -31,6 +31,7 @@ def load_csv_from_url(url: str) -> pd.DataFrame:
 
     Args:
         url: 구글시트 CSV 퍼블리시 URL
+        skip_first_row: 첫 줄을 건너뛸지 여부 (그룹헤더용)
     Returns:
         pd.DataFrame (실패시 빈 DataFrame)
     """
@@ -46,7 +47,12 @@ def load_csv_from_url(url: str) -> pd.DataFrame:
         res = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         res.raise_for_status()
         res.encoding = "utf-8"
-        return pd.read_csv(io.StringIO(res.text)).fillna("")
+        
+        # 🆕 skip_first_row=True면 첫 줄(그룹헤더) 건너뛰기
+        skip_rows = 1 if skip_first_row else 0
+        return pd.read_csv(
+            io.StringIO(res.text), skiprows=skip_rows
+        ).fillna("")
     except Exception as e:
         print(f"[load_csv_from_url] requests 실패, urllib로 재시도: {e}")
 
@@ -56,7 +62,10 @@ def load_csv_from_url(url: str) -> pd.DataFrame:
             url, headers={"User-Agent": "Mozilla/5.0"}
         )
         with urllib.request.urlopen(req, timeout=BACKUP_TIMEOUT) as response:
-            return pd.read_csv(response, encoding="utf-8").fillna("")
+            skip_rows = 1 if skip_first_row else 0
+            return pd.read_csv(
+                response, encoding="utf-8", skiprows=skip_rows
+            ).fillna("")
     except Exception as e:
         print(f"[load_csv_from_url] urllib도 실패: {e}")
         return pd.DataFrame()

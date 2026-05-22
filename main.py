@@ -49,7 +49,7 @@ st.markdown("""
 # ============================================================
 df_fishing = load_csv_from_url(FISHING_CSV)
 df_events = load_csv_from_url(CALENDAR_CSV)
-df_fishing_record = load_csv_from_url(FISHING_RECORD_CSV)
+df_fishing_record = load_csv_from_url(FISHING_RECORD_CSV, skip_first_row=True)  # 🆕 그룹헤더 건너뛰기!
 bada_id_map = load_bada_map()
 
 
