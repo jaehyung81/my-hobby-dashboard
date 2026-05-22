@@ -10,7 +10,7 @@
 
 import streamlit as st
 
-from utils.constants import FISHING_CSV, CALENDAR_CSV
+from utils.constants import FISHING_CSV, CALENDAR_CSV, FISHING_RECORD_CSV
 from utils.data_loader import load_csv_from_url, load_bada_map
 from app_pages import home, calendar, family, asset, fishing
 
@@ -49,6 +49,7 @@ st.markdown("""
 # ============================================================
 df_fishing = load_csv_from_url(FISHING_CSV)
 df_events = load_csv_from_url(CALENDAR_CSV)
+df_fishing_record = load_csv_from_url(FISHING_RECORD_CSV)
 bada_id_map = load_bada_map()
 
 
@@ -86,4 +87,4 @@ elif menu == "📈 자산 관리":
     asset.render()
 
 elif menu == "🎣 낚시":
-    fishing.render(df_fishing, bada_id_map)
+    fishing.render(df_fishing, bada_id_map, df_fishing_record)
