@@ -906,6 +906,7 @@ def _render_record_detail(df: pd.DataFrame):
         _show_info_row("어종", sel_row.get("어종", ""))
         _show_info_row("낚시방법", sel_row.get("낚시방법", ""))
         _show_info_row("사용채비", sel_row.get("사용채비", ""))
+        _show_info_row("사용바늘(호수)", sel_row.get("사용바늘(호수)", ""))
         _show_info_row("사용미끼", sel_row.get("사용미끼", ""))
         _show_info_row("히트미끼", sel_row.get("히트미끼", ""))
 
